@@ -294,6 +294,41 @@ class TestSearch:
         assert result.exit_code == 1
         assert "Configuration error" in result.output
 
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.search_messages", new_callable=AsyncMock)
+    def test_search_from_without_query(self, mock_search, mock_create):
+        client = AsyncMock()
+        mock_create.return_value = client
+        mock_search.return_value = [
+            MessageData(
+                id=1,
+                text="hello",
+                chat_name="Alice",
+                sender_name="Alice",
+                date=datetime(2025, 6, 15, 12, 0, tzinfo=UTC),
+            ),
+        ]
+        result = runner.invoke(app, ["search", "--from", "Alice"])
+
+        assert result.exit_code == 0
+        mock_search.assert_awaited_once()
+        call_kwargs = mock_search.call_args[1]
+        assert call_kwargs["from_"] == "Alice"
+
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.search_messages", new_callable=AsyncMock)
+    def test_search_from_with_query(self, mock_search, mock_create):
+        client = AsyncMock()
+        mock_create.return_value = client
+        mock_search.return_value = []
+        result = runner.invoke(app, ["search", "hello", "--from", "Alice"])
+
+        assert result.exit_code == 0
+        mock_search.assert_awaited_once()
+        call_kwargs = mock_search.call_args
+        assert call_kwargs[0][1] == "hello"
+        assert call_kwargs[1]["from_"] == "Alice"
+
 
 class TestThread:
     @patch("tgcli.client.create_client")

@@ -72,14 +72,26 @@ class TestSearchMessages:
         assert results[0].id == 1
         assert results[1].text == "also here"
 
-    async def test_search_with_chat(self, client):
+    async def test_search_with_from(self, client):
         chat_entity = _mock_entity("Work", is_group=True)
         client.get_entity = AsyncMock(return_value=chat_entity)
         client.iter_messages = MagicMock(return_value=_async_iter([]))
 
-        await search_messages(client, "q", chat="Work")
+        await search_messages(client, "q", from_="Work")
 
         client.get_entity.assert_called_with("Work")
+
+    async def test_search_without_query(self, client):
+        msgs = [_mock_msg(1, "hello")]
+        client.get_entity = AsyncMock(return_value=_mock_entity("Alice"))
+        client.iter_messages = MagicMock(return_value=_async_iter(msgs))
+
+        results = await search_messages(client, from_="Alice")
+
+        assert len(results) == 1
+        client.iter_messages.assert_called_once()
+        call_kwargs = client.iter_messages.call_args[1]
+        assert call_kwargs["search"] == ""
 
     async def test_search_respects_after(self, client):
         old_date = datetime(2025, 1, 1, tzinfo=UTC)

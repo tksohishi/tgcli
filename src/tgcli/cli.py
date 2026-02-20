@@ -170,12 +170,9 @@ def _parse_date(value: str) -> datetime:
 
 @app.command()
 def search(
-    query: str,
-    chat: Annotated[
-        str | None, typer.Option(help="Limit search to a specific chat.")
-    ] = None,
-    from_user: Annotated[
-        str | None, typer.Option("--from", help="Filter by sender name.")
+    query: Annotated[str, typer.Argument()] = "",
+    from_: Annotated[
+        str | None, typer.Option("--from", help="Scope search to a chat or person.")
     ] = None,
     limit: Annotated[int, typer.Option(help="Max results to return.")] = 20,
     after: Annotated[
@@ -205,8 +202,7 @@ def search(
             return await search_messages(
                 client,
                 query,
-                chat=chat,
-                from_user=from_user,
+                from_=from_,
                 limit=limit,
                 after=after_dt,
                 before=before_dt,

@@ -63,37 +63,23 @@ def _msg_to_data(msg, chat_name: str, sender_name: str) -> MessageData:
 
 async def search_messages(
     client: TelegramClient,
-    query: str,
+    query: str = "",
     *,
-    chat: str | None = None,
-    from_user: str | None = None,
+    from_: str | None = None,
     limit: int = 20,
     after: datetime | None = None,
     before: datetime | None = None,
 ) -> list[MessageData]:
-    """Search messages across chats or in a specific chat."""
+    """Search messages, optionally scoped to a chat or person via from_."""
     entity = None
-    if chat:
-        entity = await _resolve_entity(client, chat)
-
-    # Telegram's global search API doesn't support from_user filtering,
-    # so we only pass it when searching within a specific chat.
-    from_entity = None
-    if from_user and entity is not None:
-        from_entity = await _resolve_entity(client, from_user)
-
-    from_name_filter = from_user.lower() if (from_user and entity is None) else None
-
-    # When filtering client-side, fetch extra messages to compensate for
-    # results that will be discarded.
-    api_limit = limit * 5 if from_name_filter else limit
+    if from_:
+        entity = await _resolve_entity(client, from_)
 
     results: list[MessageData] = []
     async for msg in client.iter_messages(
         entity,
         search=query,
-        from_user=from_entity,
-        limit=api_limit,
+        limit=limit,
         offset_date=before,
     ):
         if after and msg.date and msg.date < after:
@@ -102,9 +88,6 @@ async def search_messages(
         chat_entity = await msg.get_chat()
         sender = await msg.get_sender()
         sender_name = _get_name(sender)
-
-        if from_name_filter and from_name_filter not in sender_name.lower():
-            continue
 
         results.append(_msg_to_data(msg, _get_name(chat_entity), sender_name))
         if len(results) >= limit:

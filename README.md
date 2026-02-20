@@ -45,7 +45,8 @@ This walks you through setup: saves your API credentials to `~/.config/tgcli/con
 
 ```bash
 tg search "meeting notes"
-tg search "budget" --chat "Finance Team"
+tg search "budget" --from "Finance Team"
+tg search --from "Alice"
 tg search "deadline" --from "Alice" --after 2025-01-01
 ```
 
@@ -67,18 +68,17 @@ Explicit subcommands:
 - `tg auth logout` - remove session from Keychain
 - `tg auth status` - show auth state
 
-### `tg search <query>`
+### `tg search [query]`
 
-Search messages across chats. Returns JSONL by default.
+Search messages across chats. Returns JSONL by default. Query is optional when `--from` is provided.
 
-| Flag       | Description                            |
-|------------|----------------------------------------|
-| `--chat`   | Limit search to a specific chat        |
-| `--from`   | Filter by sender name                  |
-| `--limit`  | Max results (default 20)               |
-| `--after`  | Only messages after date (YYYY-MM-DD)  |
-| `--before` | Only messages before date (YYYY-MM-DD) |
-| `--pretty` | Rich table output instead of JSONL     |
+| Flag       | Description                               |
+|------------|-------------------------------------------|
+| `--from`   | Scope search to a specific chat or person |
+| `--limit`  | Max results (default 20)                  |
+| `--after`  | Only messages after date (YYYY-MM-DD)     |
+| `--before` | Only messages before date (YYYY-MM-DD)    |
+| `--pretty` | Rich table output instead of JSONL        |
 
 ### `tg thread <chat> <message_id>`
 
