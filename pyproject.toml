@@ -28,7 +28,7 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/takeshi/tgcli"
+Repository = "https://github.com/tksohishi/tgcli"
 
 [dependency-groups]
 dev = [
