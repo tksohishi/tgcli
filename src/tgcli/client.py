@@ -39,7 +39,7 @@ async def _resolve_entity(client: TelegramClient, name: str):
     """
     try:
         return await client.get_entity(name)
-    except Exception:
+    except Exception:  # noqa: S110
         pass
 
     name_lower = name.lower()
@@ -106,9 +106,7 @@ async def search_messages(
         if from_name_filter and from_name_filter not in sender_name.lower():
             continue
 
-        results.append(
-            _msg_to_data(msg, _get_name(chat_entity), sender_name)
-        )
+        results.append(_msg_to_data(msg, _get_name(chat_entity), sender_name))
         if len(results) >= limit:
             break
 
@@ -135,7 +133,9 @@ async def get_thread_context(
     # Messages after (newer than) the target
     after_msgs = []
     async for msg in client.iter_messages(
-        entity, min_id=message_id, limit=context,
+        entity,
+        min_id=message_id,
+        limit=context,
     ):
         after_msgs.append(msg)
     after_msgs.reverse()
@@ -143,7 +143,9 @@ async def get_thread_context(
     # The target message itself + messages before (older than) it
     before_msgs = []
     async for msg in client.iter_messages(
-        entity, max_id=message_id + 1, limit=context + 1,
+        entity,
+        max_id=message_id + 1,
+        limit=context + 1,
     ):
         before_msgs.append(msg)
 

@@ -12,7 +12,9 @@ class TestSession:
     def test_save_session(self, mock_kr):
         save_session("abc123")
 
-        mock_kr.set_password.assert_called_once_with("tgcli", "telegram_session", "abc123")
+        mock_kr.set_password.assert_called_once_with(
+            "tgcli", "telegram_session", "abc123"
+        )
 
     def test_load_session_exists(self, mock_kr):
         mock_kr.get_password.return_value = "stored_session"

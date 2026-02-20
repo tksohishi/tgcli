@@ -17,8 +17,8 @@ class TelegramConfig:
 
 def _resolve_op(value: str) -> str:
     """Resolve 1Password references (op:// URIs) via the `op` CLI."""
-    result = subprocess.run(
-        ["op", "read", value],
+    result = subprocess.run(  # noqa: S603
+        ["op", "read", value],  # noqa: S607
         capture_output=True,
         text=True,
         check=True,
@@ -64,7 +64,8 @@ def load_config(config_path: Path | None = None) -> TelegramConfig:
     if not api_id or not api_hash:
         raise SystemExit(
             "Telegram API credentials not found.\n"
-            f"Set them in {CONFIG_PATH} or via TELEGRAM_API_ID / TELEGRAM_API_HASH env vars."
+            f"Set them in {CONFIG_PATH} or via "
+            "TELEGRAM_API_ID / TELEGRAM_API_HASH env vars."
         )
 
     return TelegramConfig(api_id=int(api_id), api_hash=api_hash)
@@ -89,12 +90,17 @@ def write_config_op(
     config_path: Path | None = None,
 ) -> Path:
     """Store credentials in 1Password and write op:// references to config."""
-    subprocess.run(
-        [
-            "op", "item", "create",
-            "--category", "login",
-            "--title", item_title,
-            "--vault", vault,
+    subprocess.run(  # noqa: S603
+        [  # noqa: S607
+            "op",
+            "item",
+            "create",
+            "--category",
+            "login",
+            "--title",
+            item_title,
+            "--vault",
+            vault,
             f"api_id[text]={api_id}",
             f"api_hash[text]={api_hash}",
         ],

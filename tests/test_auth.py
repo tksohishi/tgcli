@@ -3,8 +3,6 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-import pytest
-
 from tgcli.auth import get_status, login, logout
 
 
@@ -51,7 +49,9 @@ class TestLogout:
 
     @patch("tgcli.auth.delete_session")
     @patch("tgcli.auth.create_client")
-    async def test_logout_deletes_session_when_client_fails(self, mock_create, mock_delete):
+    async def test_logout_deletes_session_when_client_fails(
+        self, mock_create, mock_delete
+    ):
         """Local session should be deleted even if remote logout fails."""
         mock_create.side_effect = RuntimeError("no config")
 

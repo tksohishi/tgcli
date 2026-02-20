@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from telethon.errors import UnauthorizedError
 from typer.testing import CliRunner
 
@@ -63,7 +62,11 @@ class TestAuthStatus:
         assert result.exit_code == 0
         assert "not authenticated" in result.output
 
-    @patch("tgcli.auth.get_status", new_callable=AsyncMock, side_effect=SystemExit("credentials not found"))
+    @patch(
+        "tgcli.auth.get_status",
+        new_callable=AsyncMock,
+        side_effect=SystemExit("credentials not found"),
+    )
     def test_status_config_error_exits_1(self, mock_status):
         result = runner.invoke(app, ["auth", "status"])
 
@@ -92,7 +95,9 @@ class TestAuthSmart:
     @patch("tgcli.auth.login", new_callable=AsyncMock)
     @patch("tgcli.auth.get_status", new_callable=AsyncMock)
     @patch("tgcli.config.load_config")
-    def test_auth_not_logged_in_triggers_login(self, mock_load, mock_status, mock_login):
+    def test_auth_not_logged_in_triggers_login(
+        self, mock_load, mock_status, mock_login
+    ):
         mock_load.return_value = MagicMock()
         mock_status.return_value = {
             "authenticated": False,
@@ -109,8 +114,13 @@ class TestAuthSmart:
     @patch("tgcli.auth.login", new_callable=AsyncMock)
     @patch("tgcli.auth.get_status", new_callable=AsyncMock)
     @patch("tgcli.config.write_config")
-    @patch("tgcli.config.load_config", side_effect=[SystemExit("credentials not found"), None])
-    def test_auth_no_config_prompts_and_creates(self, mock_load, mock_write, mock_status, mock_login, mock_wb_open):
+    @patch(
+        "tgcli.config.load_config",
+        side_effect=[SystemExit("credentials not found"), None],
+    )
+    def test_auth_no_config_prompts_and_creates(
+        self, mock_load, mock_write, mock_status, mock_login, mock_wb_open
+    ):
         mock_write.return_value = "/tmp/config.toml"
         mock_status.return_value = {
             "authenticated": False,
@@ -127,8 +137,13 @@ class TestAuthSmart:
     @patch("tgcli.auth.login", new_callable=AsyncMock)
     @patch("tgcli.auth.get_status", new_callable=AsyncMock)
     @patch("tgcli.config.write_config_op")
-    @patch("tgcli.config.load_config", side_effect=[SystemExit("credentials not found"), None])
-    def test_auth_no_config_stores_in_1password(self, mock_load, mock_write_op, mock_status, mock_login, mock_wb_open):
+    @patch(
+        "tgcli.config.load_config",
+        side_effect=[SystemExit("credentials not found"), None],
+    )
+    def test_auth_no_config_stores_in_1password(
+        self, mock_load, mock_write_op, mock_status, mock_login, mock_wb_open
+    ):
         mock_write_op.return_value = "/tmp/config.toml"
         mock_status.return_value = {
             "authenticated": False,
@@ -145,16 +160,29 @@ class TestAuthSmart:
     @patch("tgcli.auth.login", new_callable=AsyncMock)
     @patch("tgcli.auth.get_status", new_callable=AsyncMock)
     @patch("tgcli.config.write_config")
-    @patch("tgcli.config.write_config_op", side_effect=FileNotFoundError("op not found"))
-    @patch("tgcli.config.load_config", side_effect=[SystemExit("credentials not found"), None])
-    def test_auth_1password_fails_falls_back_to_plain(self, mock_load, mock_write_op, mock_write, mock_status, mock_login, mock_wb_open):
+    @patch(
+        "tgcli.config.write_config_op", side_effect=FileNotFoundError("op not found")
+    )
+    @patch(
+        "tgcli.config.load_config",
+        side_effect=[SystemExit("credentials not found"), None],
+    )
+    def test_auth_1password_fails_falls_back_to_plain(
+        self,
+        mock_load,
+        mock_write_op,
+        mock_write,
+        mock_status,
+        mock_login,
+        mock_wb_open,
+    ):
         mock_write.return_value = "/tmp/config.toml"
         mock_status.return_value = {
             "authenticated": False,
             "phone": None,
             "session_exists": False,
         }
-        # Input: Enter to open browser, api_id, api_hash, accept 1Password (but it fails)
+        # Input: open browser, api_id, api_hash, accept 1Password (fails)
         result = runner.invoke(app, ["auth"], input="\n123456\nabc123\ny\n")
 
         assert result.exit_code == 0
@@ -181,7 +209,7 @@ class TestSearch:
                 text="hello world",
                 chat_name="Group",
                 sender_name="Bob",
-                date=datetime(2025, 6, 15, 12, 0, tzinfo=timezone.utc),
+                date=datetime(2025, 6, 15, 12, 0, tzinfo=UTC),
             ),
         ]
         result = runner.invoke(app, ["search", "hello", "--pretty"])
@@ -200,14 +228,14 @@ class TestSearch:
                 text="hello world",
                 chat_name="Group",
                 sender_name="Bob",
-                date=datetime(2025, 6, 15, 12, 0, tzinfo=timezone.utc),
+                date=datetime(2025, 6, 15, 12, 0, tzinfo=UTC),
             ),
             MessageData(
                 id=2,
                 text="second",
                 chat_name="DM",
                 sender_name="Eve",
-                date=datetime(2025, 6, 15, 13, 0, tzinfo=timezone.utc),
+                date=datetime(2025, 6, 15, 13, 0, tzinfo=UTC),
             ),
         ]
         result = runner.invoke(app, ["search", "hello"])
@@ -257,7 +285,9 @@ class TestSearch:
         assert result.exit_code == 2
         assert "Not authenticated" in result.output
 
-    @patch("tgcli.client.create_client", side_effect=SystemExit("credentials not found"))
+    @patch(
+        "tgcli.client.create_client", side_effect=SystemExit("credentials not found")
+    )
     def test_search_config_error_exits_1(self, mock_create):
         result = runner.invoke(app, ["search", "hello"])
 
@@ -278,7 +308,7 @@ class TestThread:
                     text="target msg",
                     chat_name="Group",
                     sender_name="Alice",
-                    date=datetime(2025, 6, 15, 12, 0, tzinfo=timezone.utc),
+                    date=datetime(2025, 6, 15, 12, 0, tzinfo=UTC),
                 ),
             ],
             10,
@@ -299,7 +329,7 @@ class TestThread:
             text="original",
             chat_name="Group",
             sender_name="Bob",
-            date=datetime(2025, 6, 15, 11, 0, tzinfo=timezone.utc),
+            date=datetime(2025, 6, 15, 11, 0, tzinfo=UTC),
         )
         mock_thread.return_value = (
             [
@@ -308,14 +338,14 @@ class TestThread:
                     text="original",
                     chat_name="Group",
                     sender_name="Bob",
-                    date=datetime(2025, 6, 15, 11, 0, tzinfo=timezone.utc),
+                    date=datetime(2025, 6, 15, 11, 0, tzinfo=UTC),
                 ),
                 MessageData(
                     id=10,
                     text="target msg",
                     chat_name="Group",
                     sender_name="Alice",
-                    date=datetime(2025, 6, 15, 12, 0, tzinfo=timezone.utc),
+                    date=datetime(2025, 6, 15, 12, 0, tzinfo=UTC),
                     reply_to_msg_id=9,
                 ),
             ],
@@ -348,7 +378,9 @@ class TestThread:
         assert result.exit_code == 2
         assert "Not authenticated" in result.output
 
-    @patch("tgcli.client.create_client", side_effect=SystemExit("credentials not found"))
+    @patch(
+        "tgcli.client.create_client", side_effect=SystemExit("credentials not found")
+    )
     def test_thread_config_error_exits_1(self, mock_create):
         result = runner.invoke(app, ["thread", "Group", "10"])
 

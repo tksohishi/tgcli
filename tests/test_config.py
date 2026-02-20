@@ -39,7 +39,7 @@ def test_load_from_env(tmp_path, monkeypatch):
 def test_env_fills_missing_toml_fields(tmp_path, monkeypatch):
     """Env vars fill in fields missing from TOML."""
     cfg = tmp_path / "config.toml"
-    cfg.write_text('api_id = 999\n')
+    cfg.write_text("api_id = 999\n")
     monkeypatch.setenv("TELEGRAM_API_HASH", "fromenv")
 
     result = load_config(config_path=cfg)
@@ -49,10 +49,7 @@ def test_env_fills_missing_toml_fields(tmp_path, monkeypatch):
 
 def test_op_resolution(tmp_path):
     cfg = tmp_path / "config.toml"
-    cfg.write_text(
-        'api_id = "op://vault/item/id"\n'
-        'api_hash = "op://vault/item/hash"\n'
-    )
+    cfg.write_text('api_id = "op://vault/item/id"\napi_hash = "op://vault/item/hash"\n')
 
     with patch("tgcli.config.subprocess.run") as mock_run:
         mock_run.side_effect = [
@@ -98,12 +95,14 @@ def test_write_config_op_creates_op_references(tmp_path):
     cfg = tmp_path / "config.toml"
 
     with patch("tgcli.config.subprocess.run") as mock_run:
-        write_config_op(123, "hash123", vault="MyVault", item_title="TG", config_path=cfg)
+        write_config_op(
+            123, "hash123", vault="MyVault", item_title="TG", config_path=cfg
+        )
 
     assert cfg.exists()
     content = cfg.read_text()
-    assert 'op://MyVault/TG/api_id' in content
-    assert 'op://MyVault/TG/api_hash' in content
+    assert "op://MyVault/TG/api_id" in content
+    assert "op://MyVault/TG/api_hash" in content
     mock_run.assert_called_once()
     args = mock_run.call_args[0][0]
     assert "op" in args

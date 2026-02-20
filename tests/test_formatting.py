@@ -51,7 +51,9 @@ class TestFormatMessageJsonl:
 class TestFormatSearchResults:
     def test_basic_table(self, make_message):
         msgs = [
-            make_message(id=1, text="hello world", chat_name="Group", sender_name="Bob"),
+            make_message(
+                id=1, text="hello world", chat_name="Group", sender_name="Bob"
+            ),
             make_message(id=2, text="second msg", chat_name="DM", sender_name="Eve"),
         ]
         output = _render(format_search_results(msgs))
@@ -101,7 +103,9 @@ class TestFormatThread:
 
 class TestFormatAuthStatus:
     def test_authenticated(self):
-        output = _render(format_auth_status(authenticated=True, phone="+1***99", session_exists=True))
+        output = _render(
+            format_auth_status(authenticated=True, phone="+1***99", session_exists=True)
+        )
 
         assert "authenticated" in output
         assert "+1***99" in output

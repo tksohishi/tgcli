@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -21,7 +21,7 @@ def _make_message(
         text=text,
         chat_name=chat_name,
         sender_name=sender_name,
-        date=date or datetime(2025, 6, 15, 12, 0, 0, tzinfo=timezone.utc),
+        date=date or datetime(2025, 6, 15, 12, 0, 0, tzinfo=UTC),
         reply_to_msg_id=reply_to_msg_id,
     )
 

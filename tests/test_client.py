@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -32,8 +32,10 @@ def _mock_msg(
     msg = AsyncMock()
     msg.id = id
     msg.text = text
-    msg.date = date or datetime(2025, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
-    msg.reply_to = SimpleNamespace(reply_to_msg_id=reply_to_msg_id) if reply_to_msg_id else None
+    msg.date = date or datetime(2025, 6, 15, 12, 0, 0, tzinfo=UTC)
+    msg.reply_to = (
+        SimpleNamespace(reply_to_msg_id=reply_to_msg_id) if reply_to_msg_id else None
+    )
     msg.get_chat = AsyncMock(return_value=_mock_entity(chat_name, is_group=is_group))
     msg.get_sender = AsyncMock(return_value=_mock_entity(sender_name))
     return msg
@@ -80,14 +82,14 @@ class TestSearchMessages:
         client.get_entity.assert_called_with("Work")
 
     async def test_search_respects_after(self, client):
-        old_date = datetime(2025, 1, 1, tzinfo=timezone.utc)
-        new_date = datetime(2025, 6, 1, tzinfo=timezone.utc)
+        old_date = datetime(2025, 1, 1, tzinfo=UTC)
+        new_date = datetime(2025, 6, 1, tzinfo=UTC)
         msgs = [
             _mock_msg(1, "new", date=new_date),
             _mock_msg(2, "old", date=old_date),
         ]
         client.iter_messages = MagicMock(return_value=_async_iter(msgs))
-        cutoff = datetime(2025, 3, 1, tzinfo=timezone.utc)
+        cutoff = datetime(2025, 3, 1, tzinfo=UTC)
 
         results = await search_messages(client, "q", after=cutoff)
 
@@ -125,21 +127,26 @@ class TestGetThreadContext:
 
     async def test_messages_in_chronological_order(self, client):
         """Messages should be returned sorted by ID (chronological)."""
+
         # iter_messages returns newest-first; the function must sort them
         def iter_side_effect(*args, **kwargs):
             if kwargs.get("min_id"):
                 # Newer messages: 13, 12, 11 (newest first from API)
-                return _async_iter([
-                    _mock_msg(13, "msg13"),
-                    _mock_msg(12, "msg12"),
-                    _mock_msg(11, "msg11"),
-                ])
+                return _async_iter(
+                    [
+                        _mock_msg(13, "msg13"),
+                        _mock_msg(12, "msg12"),
+                        _mock_msg(11, "msg11"),
+                    ]
+                )
             # Target + older: 10, 9, 8 (newest first from API)
-            return _async_iter([
-                _mock_msg(10, "target"),
-                _mock_msg(9, "msg9"),
-                _mock_msg(8, "msg8"),
-            ])
+            return _async_iter(
+                [
+                    _mock_msg(10, "target"),
+                    _mock_msg(9, "msg9"),
+                    _mock_msg(8, "msg8"),
+                ]
+            )
 
         client.iter_messages = MagicMock(side_effect=iter_side_effect)
         client.get_messages = AsyncMock(return_value=None)
@@ -155,10 +162,12 @@ class TestGetThreadContext:
         target = _mock_msg(10, "reply", reply_to_msg_id=5)
         reply_source = _mock_msg(5, "original")
 
-        client.iter_messages = MagicMock(side_effect=[
-            _async_iter([]),      # after
-            _async_iter([target]),  # before + target
-        ])
+        client.iter_messages = MagicMock(
+            side_effect=[
+                _async_iter([]),  # after
+                _async_iter([target]),  # before + target
+            ]
+        )
         client.get_messages = AsyncMock(return_value=reply_source)
 
         messages, target_id, replied_to = await get_thread_context(

@@ -30,7 +30,7 @@ async def logout() -> None:
                 await client.log_out()
         finally:
             await client.disconnect()
-    except Exception:
+    except Exception:  # noqa: S110
         pass
     delete_session()
 

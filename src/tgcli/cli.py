@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from importlib.metadata import version
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 from rich.console import Console
@@ -17,7 +17,9 @@ def _version_callback(value: bool) -> None:
 
 
 app = typer.Typer(help="Search and read Telegram messages from the terminal.")
-auth_app = typer.Typer(help="Manage Telegram authentication.", invoke_without_command=True)
+auth_app = typer.Typer(
+    help="Manage Telegram authentication.", invoke_without_command=True
+)
 app.add_typer(auth_app, name="auth")
 
 stdout = Console()
@@ -26,11 +28,18 @@ stdout = Console()
 @app.callback()
 def main(
     _version: Annotated[
-        Optional[bool],
-        typer.Option("--version", callback=_version_callback, is_eager=True, help="Show version and exit."),
+        bool | None,
+        typer.Option(
+            "--version",
+            callback=_version_callback,
+            is_eager=True,
+            help="Show version and exit.",
+        ),
     ] = None,
 ) -> None:
     """Search and read Telegram messages from the terminal."""
+
+
 stderr = Console(stderr=True)
 
 
@@ -51,7 +60,9 @@ def auth_default(ctx: typer.Context) -> None:
 
         stderr.print(f"No config found at {CONFIG_PATH}\n")
         stderr.print("You need a Telegram API app to use this tool.")
-        typer.prompt("Press Enter to open my.telegram.org/apps", default="", show_default=False)
+        typer.prompt(
+            "Press Enter to open my.telegram.org/apps", default="", show_default=False
+        )
         webbrowser.open("https://my.telegram.org/apps")
         api_id = typer.prompt("\nAPI ID", type=int)
         api_hash = typer.prompt("API Hash", type=str)
@@ -154,20 +165,28 @@ def status() -> None:
 
 
 def _parse_date(value: str) -> datetime:
-    return datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    return datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=UTC)
 
 
 @app.command()
 def search(
     query: str,
-    chat: Annotated[Optional[str], typer.Option(help="Limit search to a specific chat.")] = None,
+    chat: Annotated[
+        str | None, typer.Option(help="Limit search to a specific chat.")
+    ] = None,
     from_user: Annotated[
-        Optional[str], typer.Option("--from", help="Filter by sender name.")
+        str | None, typer.Option("--from", help="Filter by sender name.")
     ] = None,
     limit: Annotated[int, typer.Option(help="Max results to return.")] = 20,
-    after: Annotated[Optional[str], typer.Option(help="Only messages after this date (YYYY-MM-DD).")] = None,
-    before: Annotated[Optional[str], typer.Option(help="Only messages before this date (YYYY-MM-DD).")] = None,
-    pretty: Annotated[bool, typer.Option("--pretty", help="Rich table output instead of JSONL.")] = False,
+    after: Annotated[
+        str | None, typer.Option(help="Only messages after this date (YYYY-MM-DD).")
+    ] = None,
+    before: Annotated[
+        str | None, typer.Option(help="Only messages before this date (YYYY-MM-DD).")
+    ] = None,
+    pretty: Annotated[
+        bool, typer.Option("--pretty", help="Rich table output instead of JSONL.")
+    ] = False,
 ) -> None:
     """Search messages across chats."""
     from tgcli.client import create_client, search_messages
@@ -184,8 +203,13 @@ def search(
         client = create_client()
         async with client:
             return await search_messages(
-                client, query, chat=chat, from_user=from_user,
-                limit=limit, after=after_dt, before=before_dt,
+                client,
+                query,
+                chat=chat,
+                from_user=from_user,
+                limit=limit,
+                after=after_dt,
+                before=before_dt,
             )
 
     try:
@@ -221,7 +245,9 @@ def thread(
     chat: str,
     message_id: int,
     context: Annotated[int, typer.Option(help="Messages before/after the target.")] = 5,
-    pretty: Annotated[bool, typer.Option("--pretty", help="Rich text output instead of JSONL.")] = False,
+    pretty: Annotated[
+        bool, typer.Option("--pretty", help="Rich text output instead of JSONL.")
+    ] = False,
 ) -> None:
     """View a message with surrounding context."""
     from tgcli.client import create_client, get_thread_context
@@ -257,8 +283,10 @@ def thread(
 
         replied_to_id = replied_to.id if replied_to else None
         for msg in messages:
-            print(format_message_jsonl(
-                msg,
-                target=(msg.id == target_id),
-                replied_to=(msg.id == replied_to_id),
-            ))
+            print(
+                format_message_jsonl(
+                    msg,
+                    target=(msg.id == target_id),
+                    replied_to=(msg.id == replied_to_id),
+                )
+            )
