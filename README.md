@@ -1,38 +1,59 @@
-# tg
+# tgcli — Telegram in your terminal.
 
-CLI tool to search and read Telegram messages from the terminal.
+Search and read your Telegram messages from the command line. JSONL output by default for scripting; `--pretty` for human-readable tables.
 
-## Install
+## Features
+
+- **Search** - full-text search across all chats or within a specific chat, with sender, date, and limit filters
+- **Thread context** - view any message with surrounding conversation
+- **Fuzzy resolution** - chat and user names resolve via display name matching (no need for exact IDs)
+- **JSONL output** - one JSON object per line, pipe-friendly; `--pretty` for Rich tables
+- **1Password integration** - API credentials can be `op://` references resolved at runtime
+- **Secure session storage** - Telethon session key stored in macOS Keychain via `keyring`
+
+## Installation
 
 Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-uv tool install .
+uv tool install tgcli
 ```
 
-Or run directly from source:
+Or install from source:
 
 ```bash
-uv run tg --help
+git clone https://github.com/tksohishi/tgcli.git
+cd tgcli
+uv tool install .
 ```
 
 ## Quick Start
 
+### 1. Get API Credentials
+
+Create a Telegram API app at [my.telegram.org/apps](https://my.telegram.org/apps). You'll get an `api_id` and `api_hash`.
+
+### 2. Authenticate
+
 ```bash
-# Authenticate (prompts for API credentials if first run, then logs in)
 tg auth
-
-# Search messages
-tg search "meeting notes"
-
-# Search within a specific chat
-tg search "budget" --chat "Finance Team"
-
-# View a message with surrounding context
-tg thread "Finance Team" 12345
 ```
 
-Get your Telegram API credentials at [my.telegram.org/apps](https://my.telegram.org/apps).
+This walks you through setup: saves your API credentials to `~/.config/tgcli/config.toml`, then logs in with phone number + verification code.
+
+### 3. Search
+
+```bash
+tg search "meeting notes"
+tg search "budget" --chat "Finance Team"
+tg search "deadline" --from "Alice" --after 2025-01-01
+```
+
+### 4. View Thread Context
+
+```bash
+tg thread "Finance Team" 12345
+```
 
 ## Commands
 
@@ -40,31 +61,33 @@ Get your Telegram API credentials at [my.telegram.org/apps](https://my.telegram.
 
 Smart entrypoint: creates config if missing, logs in if needed, shows status if already authenticated.
 
-Explicit subcommands for scripting:
+Explicit subcommands:
 
-- `tg auth login`  -- interactive login (phone + code/2FA)
-- `tg auth logout` -- remove session from Keychain
-- `tg auth status` -- show auth state
+- `tg auth login` - interactive login (phone + code/2FA)
+- `tg auth logout` - remove session from Keychain
+- `tg auth status` - show auth state
 
 ### `tg search <query>`
 
-Search messages across chats.
+Search messages across chats. Returns JSONL by default.
 
-| Flag       | Description                          |
-|------------|--------------------------------------|
-| `--chat`   | Limit search to a specific chat      |
-| `--from`   | Filter by sender name                |
-| `--limit`  | Max results (default 20)             |
-| `--after`  | Only messages after date (YYYY-MM-DD)|
-| `--before` | Only messages before date (YYYY-MM-DD)|
+| Flag       | Description                            |
+|------------|----------------------------------------|
+| `--chat`   | Limit search to a specific chat        |
+| `--from`   | Filter by sender name                  |
+| `--limit`  | Max results (default 20)               |
+| `--after`  | Only messages after date (YYYY-MM-DD)  |
+| `--before` | Only messages before date (YYYY-MM-DD) |
+| `--pretty` | Rich table output instead of JSONL     |
 
 ### `tg thread <chat> <message_id>`
 
-View a message with surrounding context.
+View a message with surrounding context. Returns JSONL by default.
 
-| Flag        | Description                    |
-|-------------|--------------------------------|
+| Flag        | Description                       |
+|-------------|-----------------------------------|
 | `--context` | Messages before/after (default 5) |
+| `--pretty`  | Rich text output instead of JSONL |
 
 ## Configuration
 
@@ -75,7 +98,7 @@ api_id = 123456
 api_hash = "your_api_hash"
 ```
 
-Values can also be [1Password CLI](https://developer.1password.com/docs/cli/) references:
+Values can be [1Password CLI](https://developer.1password.com/docs/cli/) references:
 
 ```toml
 api_id = "op://Personal/Telegram API/api_id"
@@ -87,14 +110,9 @@ Alternatively, set `TELEGRAM_API_ID` and `TELEGRAM_API_HASH` environment variabl
 ## Contributing
 
 ```bash
-# Install dev dependencies
 uv sync --group dev
-
-# Run tests
 uv run pytest
-
-# Run a single test
-uv run pytest tests/test_config.py -k test_write_config
+uv run ruff check
 ```
 
 Tests mock Telethon entirely; no real API calls are made.
