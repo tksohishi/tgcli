@@ -50,12 +50,9 @@ def auth_default(ctx: typer.Context) -> None:
         import webbrowser
 
         stderr.print(f"No config found at {CONFIG_PATH}\n")
-        stderr.print(
-            "You need a Telegram API app to use this tool.\n"
-            "Create one at: https://my.telegram.org/apps\n"
-        )
-        if typer.confirm("Open my.telegram.org in your browser?", default=True):
-            webbrowser.open("https://my.telegram.org/apps")
+        stderr.print("You need a Telegram API app to use this tool.")
+        typer.prompt("Press Enter to open my.telegram.org/apps", default="", show_default=False)
+        webbrowser.open("https://my.telegram.org/apps")
         api_id = typer.prompt("\nAPI ID", type=int)
         api_hash = typer.prompt("API Hash", type=str)
         path = write_config(api_id, api_hash)

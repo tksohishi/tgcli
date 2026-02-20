@@ -116,8 +116,8 @@ class TestAuthSmart:
             "phone": None,
             "session_exists": False,
         }
-        # Input: confirm open browser (n), api_id, api_hash
-        result = runner.invoke(app, ["auth"], input="n\n123456\nabc123\n")
+        # Input: Enter to open browser, api_id, api_hash
+        result = runner.invoke(app, ["auth"], input="\n123456\nabc123\n")
 
         assert result.exit_code == 0
         mock_write.assert_called_once_with(123456, "abc123")
