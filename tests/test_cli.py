@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -171,7 +172,7 @@ class TestAuthSmart:
 class TestSearch:
     @patch("tgcli.client.create_client")
     @patch("tgcli.client.search_messages", new_callable=AsyncMock)
-    def test_search_with_results(self, mock_search, mock_create):
+    def test_search_pretty(self, mock_search, mock_create):
         client = AsyncMock()
         mock_create.return_value = client
         mock_search.return_value = [
@@ -183,10 +184,42 @@ class TestSearch:
                 date=datetime(2025, 6, 15, 12, 0, tzinfo=timezone.utc),
             ),
         ]
-        result = runner.invoke(app, ["search", "hello"])
+        result = runner.invoke(app, ["search", "hello", "--pretty"])
 
         assert result.exit_code == 0
         assert "hello world" in result.output
+
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.search_messages", new_callable=AsyncMock)
+    def test_search_jsonl_default(self, mock_search, mock_create):
+        client = AsyncMock()
+        mock_create.return_value = client
+        mock_search.return_value = [
+            MessageData(
+                id=1,
+                text="hello world",
+                chat_name="Group",
+                sender_name="Bob",
+                date=datetime(2025, 6, 15, 12, 0, tzinfo=timezone.utc),
+            ),
+            MessageData(
+                id=2,
+                text="second",
+                chat_name="DM",
+                sender_name="Eve",
+                date=datetime(2025, 6, 15, 13, 0, tzinfo=timezone.utc),
+            ),
+        ]
+        result = runner.invoke(app, ["search", "hello"])
+
+        assert result.exit_code == 0
+        lines = result.output.strip().splitlines()
+        assert len(lines) == 2
+        first = json.loads(lines[0])
+        assert first["text"] == "hello world"
+        assert first["chat_name"] == "Group"
+        second = json.loads(lines[1])
+        assert second["text"] == "second"
 
     @patch("tgcli.client.create_client")
     @patch("tgcli.client.search_messages", new_callable=AsyncMock)
@@ -235,7 +268,7 @@ class TestSearch:
 class TestThread:
     @patch("tgcli.client.create_client")
     @patch("tgcli.client.get_thread_context", new_callable=AsyncMock)
-    def test_thread_view(self, mock_thread, mock_create):
+    def test_thread_pretty(self, mock_thread, mock_create):
         client = AsyncMock()
         mock_create.return_value = client
         mock_thread.return_value = (
@@ -251,10 +284,57 @@ class TestThread:
             10,
             None,
         )
-        result = runner.invoke(app, ["thread", "Group", "10"])
+        result = runner.invoke(app, ["thread", "Group", "10", "--pretty"])
 
         assert result.exit_code == 0
         assert "target msg" in result.output
+
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.get_thread_context", new_callable=AsyncMock)
+    def test_thread_jsonl_default(self, mock_thread, mock_create):
+        client = AsyncMock()
+        mock_create.return_value = client
+        replied = MessageData(
+            id=9,
+            text="original",
+            chat_name="Group",
+            sender_name="Bob",
+            date=datetime(2025, 6, 15, 11, 0, tzinfo=timezone.utc),
+        )
+        mock_thread.return_value = (
+            [
+                MessageData(
+                    id=9,
+                    text="original",
+                    chat_name="Group",
+                    sender_name="Bob",
+                    date=datetime(2025, 6, 15, 11, 0, tzinfo=timezone.utc),
+                ),
+                MessageData(
+                    id=10,
+                    text="target msg",
+                    chat_name="Group",
+                    sender_name="Alice",
+                    date=datetime(2025, 6, 15, 12, 0, tzinfo=timezone.utc),
+                    reply_to_msg_id=9,
+                ),
+            ],
+            10,
+            replied,
+        )
+        result = runner.invoke(app, ["thread", "Group", "10"])
+
+        assert result.exit_code == 0
+        lines = result.output.strip().splitlines()
+        assert len(lines) == 2
+        first = json.loads(lines[0])
+        assert first["text"] == "original"
+        assert first.get("replied_to") is True
+        assert "target" not in first
+        second = json.loads(lines[1])
+        assert second["text"] == "target msg"
+        assert second.get("target") is True
+        assert "replied_to" not in second
 
     @patch("tgcli.client.create_client")
     @patch("tgcli.client.get_thread_context", new_callable=AsyncMock)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import json
+from dataclasses import asdict, dataclass
 from datetime import datetime
 
 from rich.table import Table
@@ -22,6 +23,20 @@ def _truncate(text: str, max_lines: int = 3) -> str:
     if len(lines) <= max_lines:
         return text
     return "\n".join(lines[:max_lines]) + " ..."
+
+
+def format_message_jsonl(msg: MessageData, **flags: bool) -> str:
+    """Serialize a MessageData to a single JSON line.
+
+    Extra boolean flags (e.g. target=True, replied_to=True) are merged
+    into the dict before serialization.
+    """
+    d = asdict(msg)
+    d["date"] = msg.date.isoformat()
+    for key, value in flags.items():
+        if value:
+            d[key] = True
+    return json.dumps(d, ensure_ascii=False)
 
 
 def format_search_results(messages: list[MessageData]) -> Table:

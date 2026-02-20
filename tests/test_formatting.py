@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 from io import StringIO
 
 from rich.console import Console
 
 from tgcli.formatting import (
     format_auth_status,
+    format_message_jsonl,
     format_search_results,
     format_thread,
 )
@@ -15,6 +17,35 @@ def _render(renderable) -> str:
     buf = StringIO()
     Console(file=buf, width=120, force_terminal=True).print(renderable)
     return buf.getvalue()
+
+
+class TestFormatMessageJsonl:
+    def test_basic_serialization(self, make_message):
+        msg = make_message(id=1, text="hello", chat_name="Group", sender_name="Bob")
+        line = format_message_jsonl(msg)
+        d = json.loads(line)
+
+        assert d["id"] == 1
+        assert d["text"] == "hello"
+        assert d["chat_name"] == "Group"
+        assert d["sender_name"] == "Bob"
+        assert d["date"] == "2025-06-15T12:00:00+00:00"
+        assert "target" not in d
+
+    def test_flags_included_when_true(self, make_message):
+        msg = make_message(id=2)
+        line = format_message_jsonl(msg, target=True, replied_to=False)
+        d = json.loads(line)
+
+        assert d["target"] is True
+        assert "replied_to" not in d
+
+    def test_unicode(self, make_message):
+        msg = make_message(text="こんにちは")
+        line = format_message_jsonl(msg)
+        d = json.loads(line)
+
+        assert d["text"] == "こんにちは"
 
 
 class TestFormatSearchResults:

@@ -167,10 +167,10 @@ def search(
     limit: Annotated[int, typer.Option(help="Max results to return.")] = 20,
     after: Annotated[Optional[str], typer.Option(help="Only messages after this date (YYYY-MM-DD).")] = None,
     before: Annotated[Optional[str], typer.Option(help="Only messages before this date (YYYY-MM-DD).")] = None,
+    pretty: Annotated[bool, typer.Option("--pretty", help="Rich table output instead of JSONL.")] = False,
 ) -> None:
     """Search messages across chats."""
     from tgcli.client import create_client, search_messages
-    from tgcli.formatting import format_search_results
 
     try:
         after_dt = _parse_date(after) if after else None
@@ -205,7 +205,15 @@ def search(
         stdout.print("No messages found.")
         return
 
-    stdout.print(format_search_results(results))
+    if pretty:
+        from tgcli.formatting import format_search_results
+
+        stdout.print(format_search_results(results))
+    else:
+        from tgcli.formatting import format_message_jsonl
+
+        for msg in results:
+            print(format_message_jsonl(msg))
 
 
 @app.command()
@@ -213,10 +221,10 @@ def thread(
     chat: str,
     message_id: int,
     context: Annotated[int, typer.Option(help="Messages before/after the target.")] = 5,
+    pretty: Annotated[bool, typer.Option("--pretty", help="Rich text output instead of JSONL.")] = False,
 ) -> None:
     """View a message with surrounding context."""
     from tgcli.client import create_client, get_thread_context
-    from tgcli.formatting import format_thread
 
     async def _run():
         client = create_client()
@@ -240,4 +248,17 @@ def thread(
         stdout.print("No messages found.")
         return
 
-    stdout.print(format_thread(messages, target_id, replied_to=replied_to))
+    if pretty:
+        from tgcli.formatting import format_thread
+
+        stdout.print(format_thread(messages, target_id, replied_to=replied_to))
+    else:
+        from tgcli.formatting import format_message_jsonl
+
+        replied_to_id = replied_to.id if replied_to else None
+        for msg in messages:
+            print(format_message_jsonl(
+                msg,
+                target=(msg.id == target_id),
+                replied_to=(msg.id == replied_to_id),
+            ))
