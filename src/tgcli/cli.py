@@ -2,17 +2,35 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
+from importlib.metadata import version
 from typing import Annotated, Optional
 
 import typer
 from rich.console import Console
 from telethon.errors import UnauthorizedError
 
+
+def _version_callback(value: bool) -> None:
+    if value:
+        print(f"tg {version('tgcli')}")
+        raise typer.Exit()
+
+
 app = typer.Typer(help="Search and read Telegram messages from the terminal.")
 auth_app = typer.Typer(help="Manage Telegram authentication.", invoke_without_command=True)
 app.add_typer(auth_app, name="auth")
 
 stdout = Console()
+
+
+@app.callback()
+def main(
+    _version: Annotated[
+        Optional[bool],
+        typer.Option("--version", callback=_version_callback, is_eager=True, help="Show version and exit."),
+    ] = None,
+) -> None:
+    """Search and read Telegram messages from the terminal."""
 stderr = Console(stderr=True)
 
 
@@ -38,8 +56,7 @@ def auth_default(ctx: typer.Context) -> None:
         )
         if typer.confirm("Open my.telegram.org in your browser?", default=True):
             webbrowser.open("https://my.telegram.org/apps")
-        typer.prompt("Press Enter when you have your credentials", default="", show_default=False)
-        api_id = typer.prompt("API ID", type=int)
+        api_id = typer.prompt("\nAPI ID", type=int)
         api_hash = typer.prompt("API Hash", type=str)
         path = write_config(api_id, api_hash)
         stderr.print(f"\nConfig written to {path}\n")

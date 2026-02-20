@@ -1,9 +1,14 @@
 __pycache__/
-*.pyc
-.venv/
-dist/
+*.py[cod]
 *.egg-info/
+dist/
+build/
+.venv/
+.pytest_cache/
+.coverage
+htmlcov/
 .env
 .env.*
 !.env.example
+.DS_Store
 tmp/
