@@ -12,3 +12,4 @@ htmlcov/
 !.env.example
 .DS_Store
 tmp/
+.claude/
