@@ -65,6 +65,10 @@ Session auth key stored in macOS Keychain via `keyring` + Telethon's `StringSess
 - Test each layer independently: config, auth, client, formatting, CLI integration (via `typer.testing.CliRunner`)
 - Target Python >= 3.12
 
+## Telethon Reference
+
+For Telethon questions (API methods, entity resolution, session handling, etc.), check https://docs.telethon.dev/en/stable/ first via WebFetch. Only fall back to web search when the docs don't cover it.
+
 ## When Editing
 
 - Run `uv run pytest` to verify changes

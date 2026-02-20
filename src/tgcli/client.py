@@ -31,6 +31,25 @@ def _get_name(entity) -> str:
     return " ".join(p for p in parts if p) or "Unknown"
 
 
+async def _resolve_entity(client: TelegramClient, name: str):
+    """Resolve a name to a Telethon entity.
+
+    Tries get_entity() first (handles usernames, IDs, phone numbers),
+    then falls back to fuzzy display name matching via iter_dialogs().
+    """
+    try:
+        return await client.get_entity(name)
+    except Exception:
+        pass
+
+    name_lower = name.lower()
+    async for dialog in client.iter_dialogs():
+        if name_lower in dialog.name.lower():
+            return dialog.entity
+
+    raise ValueError(f'Cannot find any chat or user matching "{name}"')
+
+
 def _msg_to_data(msg, chat_name: str, sender_name: str) -> MessageData:
     return MessageData(
         id=msg.id,
@@ -55,18 +74,26 @@ async def search_messages(
     """Search messages across chats or in a specific chat."""
     entity = None
     if chat:
-        entity = await client.get_entity(chat)
+        entity = await _resolve_entity(client, chat)
 
+    # Telegram's global search API doesn't support from_user filtering,
+    # so we only pass it when searching within a specific chat.
     from_entity = None
-    if from_user:
-        from_entity = await client.get_entity(from_user)
+    if from_user and entity is not None:
+        from_entity = await _resolve_entity(client, from_user)
+
+    from_name_filter = from_user.lower() if (from_user and entity is None) else None
+
+    # When filtering client-side, fetch extra messages to compensate for
+    # results that will be discarded.
+    api_limit = limit * 5 if from_name_filter else limit
 
     results: list[MessageData] = []
     async for msg in client.iter_messages(
         entity,
         search=query,
         from_user=from_entity,
-        limit=limit,
+        limit=api_limit,
         offset_date=before,
     ):
         if after and msg.date and msg.date < after:
@@ -74,9 +101,16 @@ async def search_messages(
 
         chat_entity = await msg.get_chat()
         sender = await msg.get_sender()
+        sender_name = _get_name(sender)
+
+        if from_name_filter and from_name_filter not in sender_name.lower():
+            continue
+
         results.append(
-            _msg_to_data(msg, _get_name(chat_entity), _get_name(sender))
+            _msg_to_data(msg, _get_name(chat_entity), sender_name)
         )
+        if len(results) >= limit:
+            break
 
     return results
 
@@ -91,7 +125,7 @@ async def get_thread_context(
 
     Returns (messages, target_id, replied_to_message).
     """
-    entity = await client.get_entity(chat)
+    entity = await _resolve_entity(client, chat)
     chat_name = _get_name(entity)
 
     # Fetch messages around the target: context after + target + context before
