@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
-from tgcli.config import TelegramConfig, load_config, write_config
+from tgcli.config import TelegramConfig, load_config, write_config, write_config_op
 
 
 def test_load_from_toml(tmp_path):
@@ -92,3 +92,20 @@ def test_write_config_overwrites_existing(tmp_path):
 
     result = load_config(config_path=cfg)
     assert result == TelegramConfig(api_id=999, api_hash="newhash")
+
+
+def test_write_config_op_creates_op_references(tmp_path):
+    cfg = tmp_path / "config.toml"
+
+    with patch("tgcli.config.subprocess.run") as mock_run:
+        write_config_op(123, "hash123", vault="MyVault", item_title="TG", config_path=cfg)
+
+    assert cfg.exists()
+    content = cfg.read_text()
+    assert 'op://MyVault/TG/api_id' in content
+    assert 'op://MyVault/TG/api_hash' in content
+    mock_run.assert_called_once()
+    args = mock_run.call_args[0][0]
+    assert "op" in args
+    assert "api_id[text]=123" in args
+    assert "api_hash[text]=hash123" in args

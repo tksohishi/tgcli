@@ -79,3 +79,32 @@ def write_config(api_id: int, api_hash: str, config_path: Path | None = None) ->
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(f'api_id = {api_id}\napi_hash = "{api_hash}"\n')
     return path
+
+
+def write_config_op(
+    api_id: int,
+    api_hash: str,
+    vault: str = "Personal",
+    item_title: str = "Telegram API",
+    config_path: Path | None = None,
+) -> Path:
+    """Store credentials in 1Password and write op:// references to config."""
+    subprocess.run(
+        [
+            "op", "item", "create",
+            "--category", "login",
+            "--title", item_title,
+            "--vault", vault,
+            f"api_id[text]={api_id}",
+            f"api_hash[text]={api_hash}",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    path = config_path or CONFIG_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    op_id = f"op://{vault}/{item_title}/api_id"
+    op_hash = f"op://{vault}/{item_title}/api_hash"
+    path.write_text(f'api_id = "{op_id}"\napi_hash = "{op_hash}"\n')
+    return path

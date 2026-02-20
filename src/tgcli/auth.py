@@ -10,7 +10,7 @@ async def login() -> None:
     """Interactive login: phone + code/2FA. Saves session to Keychain."""
     client = create_client()
     try:
-        await client.start()
+        await client.start(phone=lambda: input("Phone number: "))
         session_str = StringSession.save(client.session)
         save_session(session_str)
     finally:

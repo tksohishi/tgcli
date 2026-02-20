@@ -40,7 +40,7 @@ def auth_default(ctx: typer.Context) -> None:
     if ctx.invoked_subcommand is not None:
         return
 
-    from tgcli.config import CONFIG_PATH, load_config, write_config
+    from tgcli.config import CONFIG_PATH, load_config, write_config, write_config_op
     from tgcli.formatting import format_auth_status
 
     # Step 1: ensure config exists
@@ -55,8 +55,16 @@ def auth_default(ctx: typer.Context) -> None:
         webbrowser.open("https://my.telegram.org/apps")
         api_id = typer.prompt("\nAPI ID", type=int)
         api_hash = typer.prompt("API Hash", type=str)
-        path = write_config(api_id, api_hash)
-        stderr.print(f"\nConfig written to {path}\n")
+        if typer.confirm("\nStore credentials in 1Password?", default=False):
+            try:
+                path = write_config_op(api_id, api_hash)
+            except Exception as e:
+                stderr.print(f"[red]1Password failed:[/red] {e}")
+                stderr.print("Saving as plain text instead.")
+                path = write_config(api_id, api_hash)
+        else:
+            path = write_config(api_id, api_hash)
+        stderr.print(f"Config written to {path}\n")
     except Exception as e:
         stderr.print(f"[red]Config error:[/red] {e}")
         stderr.print(f"Check your config at {CONFIG_PATH}")
@@ -77,27 +85,40 @@ def auth_default(ctx: typer.Context) -> None:
         return
 
     # Step 3: not authenticated, run login
+    _run_login()
+
+
+def _run_login() -> None:
+    """Shared login flow for both `tg auth` and `tg auth login`."""
     from tgcli.auth import login as _login
 
+    stderr.print(
+        "\nLogging in to Telegram. You'll be asked for your phone number\n"
+        "including country code (e.g. +81 90 1234 5678). The + and any\n"
+        "spaces/dashes are optional, but the country code is required.\n"
+        "Telegram will send a verification code to your account, like\n"
+        "logging in on a new device. Your phone number is sent to\n"
+        "Telegram's API only; tgcli does not store or transmit it.\n"
+    )
     try:
         asyncio.run(_login())
-        stdout.print("[green]Login successful.[/green]")
     except Exception as e:
         stderr.print(f"[red]Login failed:[/red] {e}")
         raise typer.Exit(1)
+    stderr.print(
+        "\nRegarding the ToS warning above: unofficial API clients are\n"
+        "under observation by Telegram. Normal interactive use (searching,\n"
+        "reading your own messages) is fine. Avoid bulk scraping, spamming,\n"
+        "or using results for AI/ML model training.\n"
+        "Full terms: https://core.telegram.org/api/terms\n"
+    )
+    stdout.print("[green]Login successful.[/green]")
 
 
 @auth_app.command()
 def login() -> None:
     """Interactive login: phone + verification code (or 2FA password)."""
-    from tgcli.auth import login as _login
-
-    try:
-        asyncio.run(_login())
-        stdout.print("[green]Login successful.[/green]")
-    except Exception as e:
-        stderr.print(f"[red]Login failed:[/red] {e}")
-        raise typer.Exit(1)
+    _run_login()
 
 
 @auth_app.command()
