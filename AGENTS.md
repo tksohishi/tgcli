@@ -24,6 +24,10 @@ Layers: CLI (Typer) -> business logic (auth, client) -> Telethon.
 - Exit codes: 0 success, 1 error, 2 auth required
 - Mock Telethon entirely in tests, no real API calls
 
+## Telethon Reference
+
+For Telethon questions (API methods, entity resolution, session handling, etc.), check https://docs.telethon.dev/en/stable/ first.
+
 ## Verify
 
 ```bash
