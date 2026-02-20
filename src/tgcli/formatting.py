@@ -1,0 +1,101 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime
+
+from rich.table import Table
+from rich.text import Text
+
+
+@dataclass(frozen=True)
+class MessageData:
+    id: int
+    text: str
+    chat_name: str
+    sender_name: str
+    date: datetime
+    reply_to_msg_id: int | None = None
+
+
+def _truncate(text: str, max_lines: int = 3) -> str:
+    lines = text.splitlines()
+    if len(lines) <= max_lines:
+        return text
+    return "\n".join(lines[:max_lines]) + " ..."
+
+
+def format_search_results(messages: list[MessageData]) -> Table:
+    """Build a Rich Table for search results."""
+    table = Table(show_header=True, header_style="bold")
+    table.add_column("Date", style="dim", no_wrap=True)
+    table.add_column("Chat")
+    table.add_column("Sender")
+    table.add_column("Message")
+
+    for msg in messages:
+        table.add_row(
+            msg.date.strftime("%Y-%m-%d %H:%M"),
+            msg.chat_name,
+            msg.sender_name,
+            _truncate(msg.text),
+        )
+
+    return table
+
+
+def format_thread(
+    messages: list[MessageData],
+    target_id: int,
+    replied_to: MessageData | None = None,
+) -> Text:
+    """Build a Rich Text for thread view.
+
+    The target message is highlighted. If replied_to is provided, it's
+    shown above the target with a separator.
+    """
+    output = Text()
+
+    if replied_to:
+        output.append(
+            f"  >> {replied_to.sender_name}: {replied_to.text}\n",
+            style="dim italic",
+        )
+        output.append("  " + "-" * 40 + "\n", style="dim")
+
+    for msg in messages:
+        ts = msg.date.strftime("%H:%M")
+        line = f"[{ts}] {msg.sender_name}: {msg.text}\n"
+        if msg.id == target_id:
+            output.append(line, style="bold yellow")
+        else:
+            output.append(line)
+
+    return output
+
+
+def format_auth_status(
+    authenticated: bool,
+    phone: str | None = None,
+    session_exists: bool = False,
+) -> Text:
+    """Build a Rich Text for auth status display."""
+    output = Text()
+
+    if authenticated:
+        output.append("Status: ", style="bold")
+        output.append("authenticated\n", style="green")
+    else:
+        output.append("Status: ", style="bold")
+        output.append("not authenticated\n", style="red")
+
+    if phone:
+        output.append("Phone: ", style="bold")
+        output.append(f"{phone}\n")
+
+    output.append("Session: ", style="bold")
+    if session_exists:
+        output.append("stored in Keychain\n", style="green")
+    else:
+        output.append("none\n", style="red")
+
+    return output

@@ -1,0 +1,256 @@
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from telethon.errors import UnauthorizedError
+from typer.testing import CliRunner
+
+from tgcli.cli import app
+from tgcli.formatting import MessageData
+
+runner = CliRunner()
+
+
+class TestAuthLogin:
+    @patch("tgcli.auth.login", new_callable=AsyncMock)
+    def test_login_success(self, mock_login):
+        result = runner.invoke(app, ["auth", "login"])
+
+        assert result.exit_code == 0
+        assert "Login successful" in result.output
+
+    @patch("tgcli.auth.login", new_callable=AsyncMock, side_effect=RuntimeError("fail"))
+    def test_login_failure(self, mock_login):
+        result = runner.invoke(app, ["auth", "login"])
+
+        assert result.exit_code == 1
+
+
+class TestAuthLogout:
+    @patch("tgcli.auth.logout", new_callable=AsyncMock)
+    def test_logout_success(self, mock_logout):
+        result = runner.invoke(app, ["auth", "logout"])
+
+        assert result.exit_code == 0
+        assert "Logged out" in result.output
+
+
+class TestAuthStatus:
+    @patch("tgcli.auth.get_status", new_callable=AsyncMock)
+    def test_status_authenticated(self, mock_status):
+        mock_status.return_value = {
+            "authenticated": True,
+            "phone": "+1***99",
+            "session_exists": True,
+        }
+        result = runner.invoke(app, ["auth", "status"])
+
+        assert result.exit_code == 0
+        assert "authenticated" in result.output
+
+    @patch("tgcli.auth.get_status", new_callable=AsyncMock)
+    def test_status_not_authenticated(self, mock_status):
+        mock_status.return_value = {
+            "authenticated": False,
+            "phone": None,
+            "session_exists": False,
+        }
+        result = runner.invoke(app, ["auth", "status"])
+
+        assert result.exit_code == 0
+        assert "not authenticated" in result.output
+
+    @patch("tgcli.auth.get_status", new_callable=AsyncMock, side_effect=SystemExit("credentials not found"))
+    def test_status_config_error_exits_1(self, mock_status):
+        result = runner.invoke(app, ["auth", "status"])
+
+        assert result.exit_code == 1
+        assert "Configuration error" in result.output
+
+
+class TestAuthSmart:
+    """Tests for bare `tg auth` (no subcommand)."""
+
+    @patch("tgcli.auth.get_status", new_callable=AsyncMock)
+    @patch("tgcli.config.load_config")
+    def test_auth_already_logged_in_shows_status(self, mock_load, mock_status):
+        mock_load.return_value = MagicMock()
+        mock_status.return_value = {
+            "authenticated": True,
+            "phone": "+1***99",
+            "session_exists": True,
+        }
+        result = runner.invoke(app, ["auth"])
+
+        assert result.exit_code == 0
+        assert "authenticated" in result.output
+        assert "tg auth logout" in result.output
+
+    @patch("tgcli.auth.login", new_callable=AsyncMock)
+    @patch("tgcli.auth.get_status", new_callable=AsyncMock)
+    @patch("tgcli.config.load_config")
+    def test_auth_not_logged_in_triggers_login(self, mock_load, mock_status, mock_login):
+        mock_load.return_value = MagicMock()
+        mock_status.return_value = {
+            "authenticated": False,
+            "phone": None,
+            "session_exists": False,
+        }
+        result = runner.invoke(app, ["auth"])
+
+        assert result.exit_code == 0
+        assert "Login successful" in result.output
+        mock_login.assert_awaited_once()
+
+    @patch("webbrowser.open")
+    @patch("tgcli.auth.login", new_callable=AsyncMock)
+    @patch("tgcli.auth.get_status", new_callable=AsyncMock)
+    @patch("tgcli.config.write_config")
+    @patch("tgcli.config.load_config", side_effect=[SystemExit("credentials not found"), None])
+    def test_auth_no_config_prompts_and_creates(self, mock_load, mock_write, mock_status, mock_login, mock_wb_open):
+        mock_write.return_value = "/tmp/config.toml"
+        mock_status.return_value = {
+            "authenticated": False,
+            "phone": None,
+            "session_exists": False,
+        }
+        # Input: confirm open browser (n), press Enter, api_id, api_hash
+        result = runner.invoke(app, ["auth"], input="n\n\n123456\nabc123\n")
+
+        assert result.exit_code == 0
+        mock_write.assert_called_once_with(123456, "abc123")
+
+    @patch("tgcli.config.load_config", side_effect=ValueError("invalid literal"))
+    def test_auth_malformed_config_exits_1(self, mock_load):
+        result = runner.invoke(app, ["auth"])
+
+        assert result.exit_code == 1
+        assert "Config error" in result.output
+
+
+class TestSearch:
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.search_messages", new_callable=AsyncMock)
+    def test_search_with_results(self, mock_search, mock_create):
+        client = AsyncMock()
+        mock_create.return_value = client
+        mock_search.return_value = [
+            MessageData(
+                id=1,
+                text="hello world",
+                chat_name="Group",
+                sender_name="Bob",
+                date=datetime(2025, 6, 15, 12, 0, tzinfo=timezone.utc),
+            ),
+        ]
+        result = runner.invoke(app, ["search", "hello"])
+
+        assert result.exit_code == 0
+        assert "hello world" in result.output
+
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.search_messages", new_callable=AsyncMock)
+    def test_search_no_results(self, mock_search, mock_create):
+        client = AsyncMock()
+        mock_create.return_value = client
+        mock_search.return_value = []
+
+        result = runner.invoke(app, ["search", "nothing"])
+
+        assert result.exit_code == 0
+        assert "No messages found" in result.output
+
+    def test_search_invalid_after_date(self):
+        result = runner.invoke(app, ["search", "hello", "--after", "2025-99-99"])
+
+        assert result.exit_code == 1
+        assert "Invalid date format" in result.output
+
+    def test_search_invalid_before_date(self):
+        result = runner.invoke(app, ["search", "hello", "--before", "not-a-date"])
+
+        assert result.exit_code == 1
+        assert "Invalid date format" in result.output
+
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.search_messages", new_callable=AsyncMock)
+    def test_search_unauthorized_exits_2(self, mock_search, mock_create):
+        client = AsyncMock()
+        mock_create.return_value = client
+        mock_search.side_effect = UnauthorizedError(None, None)
+
+        result = runner.invoke(app, ["search", "hello"])
+
+        assert result.exit_code == 2
+        assert "Not authenticated" in result.output
+
+    @patch("tgcli.client.create_client", side_effect=SystemExit("credentials not found"))
+    def test_search_config_error_exits_1(self, mock_create):
+        result = runner.invoke(app, ["search", "hello"])
+
+        assert result.exit_code == 1
+        assert "Configuration error" in result.output
+
+
+class TestThread:
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.get_thread_context", new_callable=AsyncMock)
+    def test_thread_view(self, mock_thread, mock_create):
+        client = AsyncMock()
+        mock_create.return_value = client
+        mock_thread.return_value = (
+            [
+                MessageData(
+                    id=10,
+                    text="target msg",
+                    chat_name="Group",
+                    sender_name="Alice",
+                    date=datetime(2025, 6, 15, 12, 0, tzinfo=timezone.utc),
+                ),
+            ],
+            10,
+            None,
+        )
+        result = runner.invoke(app, ["thread", "Group", "10"])
+
+        assert result.exit_code == 0
+        assert "target msg" in result.output
+
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.get_thread_context", new_callable=AsyncMock)
+    def test_thread_unauthorized_exits_2(self, mock_thread, mock_create):
+        client = AsyncMock()
+        mock_create.return_value = client
+        mock_thread.side_effect = UnauthorizedError(None, None)
+
+        result = runner.invoke(app, ["thread", "Group", "10"])
+
+        assert result.exit_code == 2
+        assert "Not authenticated" in result.output
+
+    @patch("tgcli.client.create_client", side_effect=SystemExit("credentials not found"))
+    def test_thread_config_error_exits_1(self, mock_create):
+        result = runner.invoke(app, ["thread", "Group", "10"])
+
+        assert result.exit_code == 1
+        assert "Configuration error" in result.output
+
+
+class TestHelp:
+    def test_main_help(self):
+        result = runner.invoke(app, ["--help"])
+
+        assert result.exit_code == 0
+        assert "search" in result.output.lower()
+        assert "thread" in result.output.lower()
+        assert "auth" in result.output.lower()
+
+    def test_auth_help(self):
+        result = runner.invoke(app, ["auth", "--help"])
+
+        assert result.exit_code == 0
+        assert "login" in result.output.lower()
+        assert "logout" in result.output.lower()
+        assert "status" in result.output.lower()
