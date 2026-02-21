@@ -126,7 +126,7 @@ def login() -> None:
 
 @auth_app.command()
 def logout() -> None:
-    """Remove session from Keychain."""
+    """Remove session from system keychain."""
     from tgcli.auth import logout as _logout
 
     try:

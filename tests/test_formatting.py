@@ -109,7 +109,7 @@ class TestFormatAuthStatus:
 
         assert "authenticated" in output
         assert "+1***99" in output
-        assert "Keychain" in output
+        assert "keychain" in output
 
     def test_not_authenticated(self):
         output = _render(format_auth_status(authenticated=False, session_exists=False))

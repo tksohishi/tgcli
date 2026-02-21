@@ -144,7 +144,7 @@ def format_auth_status(
 
     output.append("Session: ", style="bold")
     if session_exists:
-        output.append("stored in Keychain\n", style="green")
+        output.append("stored in system keychain\n", style="green")
     else:
         output.append("none\n", style="red")
 

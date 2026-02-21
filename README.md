@@ -8,7 +8,7 @@ Give AI agents (Claude Code, Codex, Cursor, etc.) direct access to your Telegram
 - **Minimal surface** — a handful of commands; easy for agents to discover and invoke
 - **Fuzzy resolution** — chat and user names match by display name (no numeric IDs required)
 - **`--pretty` for humans** — Rich tables when you want to read output yourself
-- **Secure session storage** — Telethon session key stored in macOS Keychain via `keyring`
+- **Secure session storage** — Telethon session key stored in system keychain via `keyring`
 
 ## Installation
 
@@ -88,7 +88,7 @@ Smart entrypoint: creates config if missing, logs in if needed, shows status if 
 Explicit subcommands:
 
 - `tg auth login` - interactive login (phone + code/2FA)
-- `tg auth logout` - remove session from Keychain
+- `tg auth logout` - remove session from system keychain
 - `tg auth status` - show auth state
 
 ### `tg chats`

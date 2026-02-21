@@ -7,7 +7,7 @@ from tgcli.session import delete_session, load_session, save_session
 
 
 async def login() -> None:
-    """Interactive login: phone + code/2FA. Saves session to Keychain."""
+    """Interactive login: phone + code/2FA. Saves session to system keychain."""
     client = create_client()
     try:
         await client.start(phone=lambda: input("Phone number: "))
@@ -18,7 +18,7 @@ async def login() -> None:
 
 
 async def logout() -> None:
-    """Log out and remove session from Keychain.
+    """Log out and remove session from system keychain.
 
     Always deletes the local session, even if the remote logout fails.
     """
