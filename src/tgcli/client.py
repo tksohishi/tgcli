@@ -34,15 +34,12 @@ def _get_name(entity) -> str:
 async def _resolve_entity(client: TelegramClient, name: str):
     """Resolve a name to a Telethon entity.
 
-    Tries get_entity() first (handles usernames, IDs, phone numbers),
-    then falls back to fuzzy display name matching via iter_dialogs().
+    Handles @usernames, phone numbers, and numeric IDs via get_entity().
+    Plain names are matched case-insensitively against dialog names.
     """
     if name.lower() == "me":
         return await client.get_me()
 
-    # get_entity handles @usernames, phone numbers, and numeric IDs directly.
-    # Skip it for plain names to avoid matching unrelated usernames
-    # (e.g. "otaku" resolving to @Otaku instead of the OtakuLabs group).
     if name.startswith("@") or name.startswith("+") or name.lstrip("-").isdigit():
         try:
             return await client.get_entity(name)
@@ -50,25 +47,13 @@ async def _resolve_entity(client: TelegramClient, name: str):
             pass
 
     name_lower = name.lower()
-    candidates: list[tuple[int, object]] = []
     async for dialog in client.iter_dialogs():
-        dialog_lower = dialog.name.lower()
-        if name_lower not in dialog_lower:
-            continue
-        # Rank: exact match (0), starts-with (1), shorter name (2), longer (3)
-        if dialog_lower == name_lower:
-            rank = 0
-        elif dialog_lower.startswith(name_lower):
-            rank = 1
-        else:
-            rank = 2
-        candidates.append((rank, len(dialog.name), dialog.entity))
+        if dialog.name.lower() == name_lower:
+            return dialog.entity
 
-    if candidates:
-        candidates.sort(key=lambda c: (c[0], c[1]))
-        return candidates[0][2]
-
-    raise ValueError(f'Cannot find any chat or user matching "{name}"')
+    raise ValueError(
+        f'Cannot find chat "{name}". Use `tg chats --filter` to find exact names.'
+    )
 
 
 def _msg_to_data(msg, chat_name: str, sender_name: str) -> MessageData:
@@ -98,71 +83,30 @@ async def list_chats(
     client: TelegramClient,
     *,
     filter_name: str | None = None,
-    limit: int = 20,
+    limit: int = 100,
 ) -> list[ChatData]:
-    """List dialogs, optionally filtered by name substring."""
+    """List dialogs, optionally filtered by name substring.
+
+    limit controls how many dialogs to scan. With filter_name, matches
+    are returned from that scanned set.
+    """
     filter_lower = filter_name.lower() if filter_name else None
     results: list[ChatData] = []
+    count = 0
     async for dialog in client.iter_dialogs():
-        if filter_lower and filter_lower not in dialog.name.lower():
-            continue
-        results.append(
-            ChatData(
-                name=dialog.name,
-                chat_type=_chat_type(dialog.entity),
-                unread_count=dialog.unread_count,
-                pinned=dialog.pinned,
-                date=dialog.date,
+        count += 1
+        if not filter_lower or filter_lower in dialog.name.lower():
+            results.append(
+                ChatData(
+                    name=dialog.name,
+                    chat_type=_chat_type(dialog.entity),
+                    unread_count=dialog.unread_count,
+                    pinned=dialog.pinned,
+                    date=dialog.date,
+                )
             )
-        )
-        if len(results) >= limit:
+        if count >= limit:
             break
-    return results
-
-
-async def search_messages(
-    client: TelegramClient,
-    query: str = "",
-    *,
-    in_: str,
-    from_: str | None = None,
-    limit: int = 20,
-    after: datetime | None = None,
-    before: datetime | None = None,
-) -> list[MessageData]:
-    """Search messages in a chat, optionally filtered by sender."""
-    entity = await _resolve_entity(client, in_)
-    from_user = None
-    if from_:
-        from_user = await _resolve_entity(client, from_)
-
-    # Telegram's API is unreliable when combining search + from_user.
-    # Pass from_user server-side to narrow results, filter text client-side.
-    use_search = "" if from_user else query
-    filter_query = query.lower() if from_user and query else None
-
-    results: list[MessageData] = []
-    async for msg in client.iter_messages(
-        entity,
-        search=use_search,
-        limit=limit if not filter_query else None,
-        offset_date=before,
-        from_user=from_user,
-    ):
-        if after and msg.date and msg.date < after:
-            break
-
-        if filter_query and filter_query not in (msg.text or "").lower():
-            continue
-
-        chat_entity = await msg.get_chat()
-        sender = await msg.get_sender()
-        sender_name = _get_name(sender)
-
-        results.append(_msg_to_data(msg, _get_name(chat_entity), sender_name))
-        if len(results) >= limit:
-            break
-
     return results
 
 
@@ -170,6 +114,8 @@ async def read_messages(
     client: TelegramClient,
     chat: str,
     *,
+    query: str = "",
+    from_: str | None = None,
     limit: int = 50,
     after: datetime | None = None,
     before: datetime | None = None,
@@ -178,21 +124,34 @@ async def read_messages(
     """Read messages from a chat.
 
     Default order is newest first (tail). Set reverse=True for oldest first (head).
+    Optional query does client-side text filtering. Optional from_ filters by sender
+    (resolved server-side via from_user).
     """
     entity = await _resolve_entity(client, chat)
     chat_name = _get_name(entity)
 
+    from_user = None
+    if from_:
+        from_user = await _resolve_entity(client, from_)
+
+    filtering = bool(query or from_user)
+    filter_query = query.lower() if query else None
+
     results: list[MessageData] = []
     async for msg in client.iter_messages(
         entity,
-        limit=limit,
+        limit=None if filtering else limit,
         offset_date=before,
         reverse=reverse,
+        from_user=from_user,
     ):
         if after and msg.date and msg.date < after:
             if reverse:
                 continue
             break
+
+        if filter_query and filter_query not in (msg.text or "").lower():
+            continue
 
         sender = await msg.get_sender()
         results.append(_msg_to_data(msg, chat_name, _get_name(sender)))

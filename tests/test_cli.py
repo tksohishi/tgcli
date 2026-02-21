@@ -197,161 +197,6 @@ class TestAuthSmart:
         assert "Config error" in result.output
 
 
-class TestSearch:
-    @patch("tgcli.client.create_client")
-    @patch("tgcli.client.search_messages", new_callable=AsyncMock)
-    def test_search_pretty(self, mock_search, mock_create):
-        client = AsyncMock()
-        mock_create.return_value = client
-        mock_search.return_value = [
-            MessageData(
-                id=1,
-                text="hello world",
-                chat_name="Group",
-                sender_name="Bob",
-                date=datetime(2025, 6, 15, 12, 0, tzinfo=UTC),
-            ),
-        ]
-        result = runner.invoke(app, ["search", "hello", "--in", "Group", "--pretty"])
-
-        assert result.exit_code == 0
-        assert "hello world" in result.output
-
-    @patch("tgcli.client.create_client")
-    @patch("tgcli.client.search_messages", new_callable=AsyncMock)
-    def test_search_jsonl_default(self, mock_search, mock_create):
-        client = AsyncMock()
-        mock_create.return_value = client
-        mock_search.return_value = [
-            MessageData(
-                id=1,
-                text="hello world",
-                chat_name="Group",
-                sender_name="Bob",
-                date=datetime(2025, 6, 15, 12, 0, tzinfo=UTC),
-            ),
-            MessageData(
-                id=2,
-                text="second",
-                chat_name="DM",
-                sender_name="Eve",
-                date=datetime(2025, 6, 15, 13, 0, tzinfo=UTC),
-            ),
-        ]
-        result = runner.invoke(app, ["search", "hello", "--in", "Group"])
-
-        assert result.exit_code == 0
-        jsonl = [
-            json.loads(line)
-            for line in result.output.strip().splitlines()
-            if line.startswith("{")
-        ]
-        assert len(jsonl) == 2
-        assert jsonl[0]["text"] == "hello world"
-        assert jsonl[0]["chat_name"] == "Group"
-        assert jsonl[1]["text"] == "second"
-
-    @patch("tgcli.client.create_client")
-    @patch("tgcli.client.search_messages", new_callable=AsyncMock)
-    def test_search_no_results(self, mock_search, mock_create):
-        client = AsyncMock()
-        mock_create.return_value = client
-        mock_search.return_value = []
-
-        result = runner.invoke(app, ["search", "nothing", "--in", "Group"])
-
-        assert result.exit_code == 0
-        assert "No messages found" in result.output
-
-    def test_search_invalid_after_date(self):
-        result = runner.invoke(
-            app, ["search", "hello", "--in", "G", "--after", "2025-99-99"]
-        )
-
-        assert result.exit_code == 1
-        assert "Invalid date format" in result.output
-
-    def test_search_invalid_before_date(self):
-        result = runner.invoke(
-            app, ["search", "hello", "--in", "G", "--before", "not-a-date"]
-        )
-
-        assert result.exit_code == 1
-        assert "Invalid date format" in result.output
-
-    @patch("tgcli.client.create_client")
-    @patch("tgcli.client.search_messages", new_callable=AsyncMock)
-    def test_search_unauthorized_exits_2(self, mock_search, mock_create):
-        client = AsyncMock()
-        mock_create.return_value = client
-        mock_search.side_effect = UnauthorizedError(None, None)
-
-        result = runner.invoke(app, ["search", "hello", "--in", "Group"])
-
-        assert result.exit_code == 2
-        assert "Not authenticated" in result.output
-
-    @patch(
-        "tgcli.client.create_client", side_effect=SystemExit("credentials not found")
-    )
-    def test_search_config_error_exits_1(self, mock_create):
-        result = runner.invoke(app, ["search", "hello", "--in", "Group"])
-
-        assert result.exit_code == 1
-        assert "Configuration error" in result.output
-
-    def test_search_requires_in(self):
-        result = runner.invoke(app, ["search", "hello"])
-
-        assert result.exit_code == 2
-
-    @patch("tgcli.client.create_client")
-    @patch("tgcli.client.search_messages", new_callable=AsyncMock)
-    def test_search_from_with_in(self, mock_search, mock_create):
-        client = AsyncMock()
-        mock_create.return_value = client
-        mock_search.return_value = []
-        result = runner.invoke(
-            app, ["search", "hello", "--in", "Work", "--from", "Alice"]
-        )
-
-        assert result.exit_code == 0
-        mock_search.assert_awaited_once()
-        call_kwargs = mock_search.call_args[1]
-        assert call_kwargs["from_"] == "Alice"
-        assert call_kwargs["in_"] == "Work"
-
-    @patch("tgcli.client.create_client")
-    @patch("tgcli.client.search_messages", new_callable=AsyncMock)
-    def test_search_in_option(self, mock_search, mock_create):
-        client = AsyncMock()
-        mock_create.return_value = client
-        mock_search.return_value = []
-        result = runner.invoke(app, ["search", "hello", "--in", "Work"])
-
-        assert result.exit_code == 0
-        mock_search.assert_awaited_once()
-        call_kwargs = mock_search.call_args[1]
-        assert call_kwargs["in_"] == "Work"
-        assert call_kwargs["from_"] is None
-
-    @patch("tgcli.client.create_client")
-    @patch("tgcli.client.search_messages", new_callable=AsyncMock)
-    def test_search_in_and_from(self, mock_search, mock_create):
-        client = AsyncMock()
-        mock_create.return_value = client
-        mock_search.return_value = []
-        result = runner.invoke(
-            app, ["search", "hello", "--in", "Work", "--from", "Alice"]
-        )
-
-        assert result.exit_code == 0
-        mock_search.assert_awaited_once()
-        call_kwargs = mock_search.call_args[1]
-        assert call_kwargs["in_"] == "Work"
-        assert call_kwargs["from_"] == "Alice"
-
-
 class TestRead:
     @patch("tgcli.client.create_client")
     @patch("tgcli.client.read_messages", new_callable=AsyncMock)
@@ -452,6 +297,57 @@ class TestRead:
         assert result.exit_code == 1
         assert "Invalid date format" in result.output
 
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.read_messages", new_callable=AsyncMock)
+    def test_read_query_flag(self, mock_read, mock_create):
+        client = AsyncMock()
+        mock_create.return_value = client
+        mock_read.return_value = []
+        result = runner.invoke(app, ["read", "Group", "--query", "hello"])
+
+        assert result.exit_code == 0
+        mock_read.assert_awaited_once()
+        call_kwargs = mock_read.call_args[1]
+        assert call_kwargs["query"] == "hello"
+
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.read_messages", new_callable=AsyncMock)
+    def test_read_q_shorthand(self, mock_read, mock_create):
+        client = AsyncMock()
+        mock_create.return_value = client
+        mock_read.return_value = []
+        result = runner.invoke(app, ["read", "Group", "-q", "hello"])
+
+        assert result.exit_code == 0
+        call_kwargs = mock_read.call_args[1]
+        assert call_kwargs["query"] == "hello"
+
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.read_messages", new_callable=AsyncMock)
+    def test_read_from_flag(self, mock_read, mock_create):
+        client = AsyncMock()
+        mock_create.return_value = client
+        mock_read.return_value = []
+        result = runner.invoke(app, ["read", "Group", "--from", "Alice"])
+
+        assert result.exit_code == 0
+        mock_read.assert_awaited_once()
+        call_kwargs = mock_read.call_args[1]
+        assert call_kwargs["from_"] == "Alice"
+
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.read_messages", new_callable=AsyncMock)
+    def test_read_query_and_from(self, mock_read, mock_create):
+        client = AsyncMock()
+        mock_create.return_value = client
+        mock_read.return_value = []
+        result = runner.invoke(app, ["read", "Group", "-q", "hello", "--from", "Alice"])
+
+        assert result.exit_code == 0
+        call_kwargs = mock_read.call_args[1]
+        assert call_kwargs["query"] == "hello"
+        assert call_kwargs["from_"] == "Alice"
+
 
 class TestContext:
     @patch("tgcli.client.create_client")
@@ -551,7 +447,7 @@ class TestHelp:
         result = runner.invoke(app, ["--help"])
 
         assert result.exit_code == 0
-        assert "search" in result.output.lower()
+        assert "search" not in result.output.lower()
         assert "read" in result.output.lower()
         assert "context" in result.output.lower()
         assert "auth" in result.output.lower()

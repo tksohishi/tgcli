@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from tgcli.client import create_client, get_context, read_messages, search_messages
+from tgcli.client import create_client, get_context, read_messages
 
 _next_entity_id = 0
 
@@ -57,108 +57,6 @@ class TestCreateClient:
 
         mock_ss.assert_called_once_with("session_str")
         mock_tc.assert_called_once_with(mock_ss.return_value, 123, "abc")
-
-
-class TestSearchMessages:
-    @pytest.fixture()
-    def client(self):
-        c = AsyncMock()
-        group_dialog = _mock_dialog("Group")
-        c.iter_dialogs = MagicMock(side_effect=lambda: _async_iter([group_dialog]))
-        return c
-
-    async def test_basic_search(self, client):
-        msgs = [_mock_msg(1, "found it"), _mock_msg(2, "also here")]
-        client.iter_messages = MagicMock(return_value=_async_iter(msgs))
-
-        results = await search_messages(client, "found", in_="Group")
-
-        assert len(results) == 2
-        assert results[0].text == "found it"
-        assert results[0].id == 1
-        assert results[1].text == "also here"
-
-    async def test_search_from_me(self, client):
-        me_entity = _mock_entity("Takeshi")
-        me_entity.id = 100
-        msg = _mock_msg(1, "my message", sender_name="Takeshi")
-        msg.sender_id = 100
-        client.get_me = AsyncMock(return_value=me_entity)
-        client.iter_messages = MagicMock(return_value=_async_iter([msg]))
-
-        results = await search_messages(client, "my message", in_="Group", from_="me")
-
-        client.get_me.assert_called_once()
-        assert len(results) == 1
-
-    async def test_search_with_from_filters_text_client_side(self, client):
-        alice_dialog = _mock_dialog("Alice")
-        client.iter_dialogs = MagicMock(
-            side_effect=[
-                _async_iter([_mock_dialog("Group")]),
-                _async_iter([alice_dialog]),
-            ]
-        )
-        match = _mock_msg(1, "hello world")
-        miss = _mock_msg(2, "goodbye")
-        client.iter_messages = MagicMock(return_value=_async_iter([match, miss]))
-
-        results = await search_messages(client, "hello", in_="Group", from_="Alice")
-
-        assert len(results) == 1
-        assert results[0].text == "hello world"
-        # from_user passed server-side, search text filtered client-side
-        call_kwargs = client.iter_messages.call_args[1]
-        assert call_kwargs["search"] == ""
-        assert call_kwargs["from_user"] == alice_dialog.entity
-
-    async def test_search_with_in_and_from(self, client):
-        work_dialog = _mock_dialog("Work")
-        alice_dialog = _mock_dialog("Alice")
-        client.iter_dialogs = MagicMock(
-            side_effect=[
-                _async_iter([work_dialog]),
-                _async_iter([alice_dialog]),
-            ]
-        )
-        client.iter_messages = MagicMock(return_value=_async_iter([]))
-
-        await search_messages(client, "q", in_="Work", from_="Alice")
-
-        call_kwargs = client.iter_messages.call_args
-        assert call_kwargs[0][0] == work_dialog.entity
-        assert call_kwargs[1]["from_user"] == alice_dialog.entity
-
-    async def test_search_without_query(self, client):
-        alice_dialog = _mock_dialog("Alice")
-        msg = _mock_msg(1, "hello")
-        msg.sender_id = alice_dialog.entity.id
-        client.iter_dialogs = MagicMock(
-            side_effect=[
-                _async_iter([_mock_dialog("Group")]),
-                _async_iter([alice_dialog]),
-            ]
-        )
-        client.iter_messages = MagicMock(return_value=_async_iter([msg]))
-
-        results = await search_messages(client, in_="Group", from_="Alice")
-
-        assert len(results) == 1
-
-    async def test_search_respects_after(self, client):
-        old_date = datetime(2025, 1, 1, tzinfo=UTC)
-        new_date = datetime(2025, 6, 1, tzinfo=UTC)
-        msgs = [
-            _mock_msg(1, "new", date=new_date),
-            _mock_msg(2, "old", date=old_date),
-        ]
-        client.iter_messages = MagicMock(return_value=_async_iter(msgs))
-        cutoff = datetime(2025, 3, 1, tzinfo=UTC)
-
-        results = await search_messages(client, "q", in_="Group", after=cutoff)
-
-        assert len(results) == 1
-        assert results[0].text == "new"
 
 
 class TestReadMessages:
@@ -219,6 +117,70 @@ class TestReadMessages:
         assert len(results) == 2
         call_kwargs = client.iter_messages.call_args[1]
         assert call_kwargs["reverse"] is True
+
+    async def test_read_query_filters_client_side(self, client):
+        msgs = [_mock_msg(1, "hello world"), _mock_msg(2, "goodbye")]
+        client.iter_messages = MagicMock(return_value=_async_iter(msgs))
+
+        results = await read_messages(client, "Group", query="hello")
+
+        assert len(results) == 1
+        assert results[0].text == "hello world"
+        # limit=None when filtering
+        call_kwargs = client.iter_messages.call_args[1]
+        assert call_kwargs["limit"] is None
+
+    async def test_read_query_case_insensitive(self, client):
+        msgs = [_mock_msg(1, "Hello World"), _mock_msg(2, "goodbye")]
+        client.iter_messages = MagicMock(return_value=_async_iter(msgs))
+
+        results = await read_messages(client, "Group", query="hello")
+
+        assert len(results) == 1
+        assert results[0].text == "Hello World"
+
+    async def test_read_from_resolves_sender(self, client):
+        me_entity = _mock_entity("Takeshi")
+        client.get_me = AsyncMock(return_value=me_entity)
+        msgs = [_mock_msg(1, "my message")]
+        client.iter_messages = MagicMock(return_value=_async_iter(msgs))
+
+        results = await read_messages(client, "Group", from_="me")
+
+        client.get_me.assert_called_once()
+        call_kwargs = client.iter_messages.call_args[1]
+        assert call_kwargs["from_user"] == me_entity
+        assert call_kwargs["limit"] is None
+        assert len(results) == 1
+
+    async def test_read_query_and_from_combined(self, client):
+        alice_dialog = _mock_dialog("Alice")
+        client.iter_dialogs = MagicMock(
+            side_effect=[
+                _async_iter([_mock_dialog("Group")]),
+                _async_iter([alice_dialog]),
+            ]
+        )
+        match = _mock_msg(1, "hello world")
+        miss = _mock_msg(2, "goodbye")
+        client.iter_messages = MagicMock(return_value=_async_iter([match, miss]))
+
+        results = await read_messages(client, "Group", query="hello", from_="Alice")
+
+        assert len(results) == 1
+        assert results[0].text == "hello world"
+        call_kwargs = client.iter_messages.call_args[1]
+        assert call_kwargs["from_user"] == alice_dialog.entity
+        assert call_kwargs["limit"] is None
+
+    async def test_read_no_query_no_from_passes_limit(self, client):
+        msgs = [_mock_msg(1, "hello")]
+        client.iter_messages = MagicMock(return_value=_async_iter(msgs))
+
+        await read_messages(client, "Group", limit=10)
+
+        call_kwargs = client.iter_messages.call_args[1]
+        assert call_kwargs["limit"] == 10
 
 
 class TestGetContext:

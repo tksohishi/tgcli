@@ -1,11 +1,10 @@
 # tgcli — Telegram in your terminal.
 
-Search and read your Telegram messages from the command line. JSONL output by default for scripting; `--pretty` for human-readable tables.
+Read your Telegram messages from the command line. JSONL output by default for scripting; `--pretty` for human-readable tables.
 
 ## Features
 
-- **Search** - full-text search across all chats, scoped with `--in` (chat) and `--from` (sender), plus date and limit filters
-- **Read** - read recent messages from any chat
+- **Read** - read recent messages from any chat, with text and sender filtering
 - **Context** - view any message with surrounding conversation
 - **Fuzzy resolution** - chat and user names resolve via display name matching (no need for exact IDs)
 - **JSONL output** - one JSON object per line, pipe-friendly; `--pretty` for Rich tables
@@ -42,23 +41,16 @@ tg auth
 
 This walks you through setup: saves your API credentials to `~/.config/tgcli/config.toml`, then logs in with phone number + verification code.
 
-### 3. Search
-
-```bash
-tg search "meeting notes"
-tg search "budget" --in "Finance Team"
-tg search --from me                     # your messages across all chats
-tg search "deadline" --in "Finance Team" --from "Alice" --after 2025-01-01
-```
-
-### 4. Read Messages
+### 3. Read Messages
 
 ```bash
 tg read "Alice"
 tg read "Finance Team" --limit 20
+tg read "Finance Team" -q "budget"
+tg read "Finance Team" -q "deadline" --from "Alice" --after 2025-01-01
 ```
 
-### 5. View Context
+### 4. View Context
 
 ```bash
 tg context "Finance Team" 12345
@@ -76,30 +68,19 @@ Explicit subcommands:
 - `tg auth logout` - remove session from Keychain
 - `tg auth status` - show auth state
 
-### `tg search [query]`
-
-Search messages across chats. Returns JSONL by default. Query is optional when `--in` or `--from` is provided.
-
-| Flag       | Description                            |
-|------------|----------------------------------------|
-| `--in`     | Chat or group to search within         |
-| `--from`   | Filter by sender                       |
-| `--limit`  | Max results (default 20)               |
-| `--after`  | Only messages after date (YYYY-MM-DD)  |
-| `--before` | Only messages before date (YYYY-MM-DD) |
-| `--pretty` | Rich table output instead of JSONL     |
-
 ### `tg read <chat>`
 
 Read recent messages from a chat. Returns JSONL by default, newest first.
 
-| Flag       | Description                            |
-|------------|----------------------------------------|
-| `--limit`  | Max messages (default 50)              |
-| `--head`   | Oldest messages first                  |
-| `--after`  | Only messages after date (YYYY-MM-DD)  |
-| `--before` | Only messages before date (YYYY-MM-DD) |
-| `--pretty` | Rich table output instead of JSONL     |
+| Flag           | Description                            |
+|----------------|----------------------------------------|
+| `--query`/`-q` | Filter messages by text                |
+| `--from`       | Filter by sender                       |
+| `--limit`      | Max messages (default 50)              |
+| `--head`       | Oldest messages first                  |
+| `--after`      | Only messages after date (YYYY-MM-DD)  |
+| `--before`     | Only messages before date (YYYY-MM-DD) |
+| `--pretty`     | Rich table output instead of JSONL     |
 
 ### `tg context <chat> <message_id>`
 

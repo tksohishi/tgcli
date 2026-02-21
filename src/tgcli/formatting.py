@@ -102,14 +102,6 @@ def format_chat_line(chat: ChatData) -> str:
     return chat.name
 
 
-def format_chat_jsonl(chat: ChatData) -> str:
-    """Serialize a ChatData to a single JSON line."""
-    d = asdict(chat)
-    if chat.date:
-        d["date"] = chat.date.isoformat()
-    return json.dumps(d, ensure_ascii=False)
-
-
 def format_chats_table(chats: list[ChatData]) -> Table:
     """Build a Rich Table for chat listing."""
     table = Table(show_header=True, header_style="bold")

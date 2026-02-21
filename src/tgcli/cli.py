@@ -24,7 +24,7 @@ def _version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
-app = typer.Typer(help="Search and read Telegram messages from the terminal.")
+app = typer.Typer(help="Read Telegram messages from the terminal.")
 auth_app = typer.Typer(
     help="Manage Telegram authentication.", invoke_without_command=True
 )
@@ -45,7 +45,7 @@ def main(
         ),
     ] = None,
 ) -> None:
-    """Search and read Telegram messages from the terminal."""
+    """Read Telegram messages from the terminal."""
 
 
 stderr = Console(stderr=True)
@@ -181,7 +181,7 @@ def chats(
     filter_: Annotated[
         str | None, typer.Option("--filter", help="Fuzzy filter by chat name.")
     ] = None,
-    limit: Annotated[int, typer.Option(help="Max chats to list.")] = 20,
+    limit: Annotated[int, typer.Option(help="Max chats to list.")] = 100,
     pretty: Annotated[
         bool, typer.Option("--pretty", help="Rich table output.")
     ] = False,
@@ -220,80 +220,14 @@ def chats(
 
 
 @app.command()
-def search(
-    query: Annotated[str, typer.Argument()] = "",
-    in_: Annotated[
-        str, typer.Option("--in", help="Chat or group to search within.")
-    ] = ...,
+def read(
+    chat: Annotated[str, typer.Argument(help="Chat or person to read messages from.")],
+    query: Annotated[
+        str | None, typer.Option("--query", "-q", help="Filter messages by text.")
+    ] = None,
     from_: Annotated[
         str | None, typer.Option("--from", help="Filter by sender.")
     ] = None,
-    limit: Annotated[int, typer.Option(help="Max results to return.")] = 20,
-    after: Annotated[
-        str | None, typer.Option(help="Only messages after this date (YYYY-MM-DD).")
-    ] = None,
-    before: Annotated[
-        str | None, typer.Option(help="Only messages before this date (YYYY-MM-DD).")
-    ] = None,
-    pretty: Annotated[
-        bool, typer.Option("--pretty", help="Rich table output instead of JSONL.")
-    ] = False,
-) -> None:
-    """Search messages in a chat."""
-    from tgcli.client import create_client, search_messages
-
-    try:
-        after_dt = _parse_date(after) if after else None
-        before_dt = _parse_date(before) if before else None
-    except ValueError as e:
-        stderr.print(f"[red]Invalid date format:[/red] {e}")
-        stderr.print("Expected format: YYYY-MM-DD")
-        raise typer.Exit(1)
-
-    async def _run():
-        client = create_client()
-        async with client:
-            return await search_messages(
-                client,
-                query,
-                in_=in_,
-                from_=from_,
-                limit=limit,
-                after=after_dt,
-                before=before_dt,
-            )
-
-    try:
-        results = asyncio.run(_run())
-    except SystemExit as e:
-        stderr.print(f"[red]Configuration error:[/red] {e}")
-        stderr.print("Run `tg auth` to set up.")
-        raise typer.Exit(1)
-    except UnauthorizedError:
-        stderr.print("[red]Not authenticated.[/red] Run `tg auth login` first.")
-        raise typer.Exit(2)
-    except Exception as e:
-        stderr.print(f"[red]Search failed:[/red] {e}")
-        raise typer.Exit(1)
-
-    if not results:
-        stdout.print("No messages found.")
-        return
-
-    if pretty:
-        from tgcli.formatting import format_search_results
-
-        stdout.print(format_search_results(results))
-    else:
-        from tgcli.formatting import format_message_jsonl
-
-        for msg in results:
-            print(format_message_jsonl(msg))
-
-
-@app.command()
-def read(
-    chat: Annotated[str, typer.Argument(help="Chat or person to read messages from.")],
     limit: Annotated[int, typer.Option(help="Max messages to return.")] = 50,
     head: Annotated[
         bool, typer.Option("--head", help="Oldest messages first.")
@@ -325,6 +259,8 @@ def read(
             return await read_messages(
                 client,
                 chat,
+                query=query or "",
+                from_=from_,
                 limit=limit,
                 after=after_dt,
                 before=before_dt,
