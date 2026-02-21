@@ -10,6 +10,7 @@ src/tgcli/
   config.py       # Config loading (TOML + env vars)
   formatting.py   # Pure output formatting functions (no I/O)
   session.py      # Keychain-backed StringSession via keyring (cross-platform)
+  update.py       # Update checking, install method detection (stdlib only)
 tests/              # pytest + pytest-asyncio, Telethon fully mocked
 ```
 
