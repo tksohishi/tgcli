@@ -12,8 +12,6 @@ Give AI agents (Claude Code, Codex, Cursor, etc.) direct access to your Telegram
 
 ## Installation
 
-Requires Python 3.12+.
-
 **One-liner** (installs [uv](https://docs.astral.sh/uv/) if needed):
 
 ```bash
