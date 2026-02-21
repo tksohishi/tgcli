@@ -1,11 +1,11 @@
 # tgcli — Telegram for your terminal and your AI agents.
 
-Give AI agents (Claude Code, Codex, Cursor, etc.) direct access to your Telegram conversations. Three commands, structured JSONL output, fuzzy name resolution. Works equally well for humans with `--pretty`.
+Give AI agents (Claude Code, Codex, Cursor, etc.) direct access to your Telegram conversations. Structured JSONL output, minimal command surface, fuzzy name resolution. Works equally well for humans with `--pretty`.
 
 ## Features
 
 - **JSONL by default** — one JSON object per line; agents parse it natively, scripts pipe it freely
-- **3-command surface** — `auth`, `read`, `context`; easy for agents to discover and invoke
+- **Minimal surface** — a handful of commands; easy for agents to discover and invoke
 - **Fuzzy resolution** — chat and user names match by display name (no numeric IDs required)
 - **`--pretty` for humans** — Rich tables when you want to read output yourself
 - **Secure session storage** — Telethon session key stored in macOS Keychain via `keyring`
