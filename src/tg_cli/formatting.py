@@ -97,9 +97,14 @@ def format_context(
     return output
 
 
-def format_chat_line(chat: ChatData) -> str:
-    """Format a chat as a single line: name."""
-    return chat.name
+def format_chat_jsonl(chat: ChatData) -> str:
+    """Serialize a ChatData to a single JSON line."""
+    d = asdict(chat)
+    if chat.date:
+        d["date"] = chat.date.isoformat()
+    else:
+        d["date"] = None
+    return json.dumps(d, ensure_ascii=False)
 
 
 def format_chats_table(chats: list[ChatData]) -> Table:

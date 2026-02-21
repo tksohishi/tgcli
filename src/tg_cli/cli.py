@@ -200,10 +200,10 @@ def chats(
 
         stdout.print(format_chats_table(results))
     else:
-        from tg_cli.formatting import format_chat_line
+        from tg_cli.formatting import format_chat_jsonl
 
         for chat in results:
-            print(format_chat_line(chat))
+            print(format_chat_jsonl(chat))
 
 
 @app.command()
