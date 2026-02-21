@@ -37,6 +37,9 @@ async def _resolve_entity(client: TelegramClient, name: str):
     Tries get_entity() first (handles usernames, IDs, phone numbers),
     then falls back to fuzzy display name matching via iter_dialogs().
     """
+    if name.lower() == "me":
+        return await client.get_me()
+
     try:
         return await client.get_entity(name)
     except Exception:  # noqa: S110

@@ -72,6 +72,18 @@ class TestSearchMessages:
         assert results[0].id == 1
         assert results[1].text == "also here"
 
+    async def test_search_from_me(self, client):
+        me_entity = _mock_entity("Takeshi")
+        client.get_me = AsyncMock(return_value=me_entity)
+        client.iter_messages = MagicMock(return_value=_async_iter([]))
+
+        await search_messages(client, "q", from_="me")
+
+        client.get_me.assert_called_once()
+        call_kwargs = client.iter_messages.call_args
+        assert call_kwargs[0][0] is None
+        assert call_kwargs[1]["from_user"] == me_entity
+
     async def test_search_from_only(self, client):
         sender_entity = _mock_entity("Alice")
         client.get_entity = AsyncMock(return_value=sender_entity)
