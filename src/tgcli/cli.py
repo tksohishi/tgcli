@@ -12,15 +12,7 @@ from telethon.errors import UnauthorizedError
 
 def _version_callback(value: bool) -> None:
     if value:
-        ver = version("tgcli")
-        try:
-            from tgcli._commit import COMMIT
-
-            if COMMIT:
-                ver = f"{ver}-{COMMIT}"
-        except ImportError:
-            pass
-        print(ver)
+        print(version("tgcli"))
         raise typer.Exit()
 
 
