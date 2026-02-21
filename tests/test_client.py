@@ -118,6 +118,21 @@ class TestReadMessages:
         call_kwargs = client.iter_messages.call_args[1]
         assert call_kwargs["reverse"] is True
 
+    async def test_read_reverse_before_filters_correctly(self, client):
+        cutoff = datetime(2025, 3, 1, tzinfo=UTC)
+        msgs = [
+            _mock_msg(1, "jan", date=datetime(2025, 1, 1, tzinfo=UTC)),
+            _mock_msg(2, "mar", date=datetime(2025, 3, 1, tzinfo=UTC)),
+            _mock_msg(3, "apr", date=datetime(2025, 4, 1, tzinfo=UTC)),
+        ]
+        client.iter_messages = MagicMock(return_value=_async_iter(msgs))
+
+        results = await read_messages(client, "Group", before=cutoff, reverse=True)
+
+        call_kwargs = client.iter_messages.call_args[1]
+        assert call_kwargs["offset_date"] is None
+        assert [m.id for m in results] == [1]
+
     async def test_read_query_filters_client_side(self, client):
         msgs = [_mock_msg(1, "hello world"), _mock_msg(2, "goodbye")]
         client.iter_messages = MagicMock(return_value=_async_iter(msgs))
@@ -261,6 +276,25 @@ class TestGetContext:
 
         assert replied_to is not None
         assert replied_to.text == "original"
+
+    async def test_after_side_uses_nearest_newer_messages(self, client):
+        def iter_side_effect(*args, **kwargs):
+            if kwargs.get("min_id"):
+                if kwargs.get("reverse"):
+                    return _async_iter(
+                        [_mock_msg(11, "near11"), _mock_msg(12, "near12")]
+                    )
+                return _async_iter([_mock_msg(30, "far30"), _mock_msg(29, "far29")])
+            return _async_iter([_mock_msg(10, "target"), _mock_msg(9, "before9")])
+
+        client.iter_messages = MagicMock(side_effect=iter_side_effect)
+        client.get_messages = AsyncMock(return_value=None)
+
+        messages, _, _ = await get_context(client, "Group", 10, context=2)
+
+        assert [m.id for m in messages] == [9, 10, 11, 12]
+        after_call_kwargs = client.iter_messages.call_args_list[0][1]
+        assert after_call_kwargs["reverse"] is True
 
 
 def _mock_dialog(name: str, *, pinned: bool = False):

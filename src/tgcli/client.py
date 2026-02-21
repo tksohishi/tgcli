@@ -136,15 +136,21 @@ async def read_messages(
 
     filtering = bool(query or from_user)
     filter_query = query.lower() if query else None
+    offset_date = before if before and not reverse else None
 
     results: list[MessageData] = []
     async for msg in client.iter_messages(
         entity,
         limit=None if filtering else limit,
-        offset_date=before,
+        offset_date=offset_date,
         reverse=reverse,
         from_user=from_user,
     ):
+        if before and msg.date and msg.date >= before:
+            if reverse:
+                break
+            continue
+
         if after and msg.date and msg.date < after:
             if reverse:
                 continue
@@ -184,9 +190,9 @@ async def get_context(
         entity,
         min_id=message_id,
         limit=context,
+        reverse=True,
     ):
         after_msgs.append(msg)
-    after_msgs.reverse()
 
     # The target message itself + messages before (older than) it
     before_msgs = []

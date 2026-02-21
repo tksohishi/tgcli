@@ -197,6 +197,20 @@ class TestAuthSmart:
         assert "Config error" in result.output
 
 
+class TestChats:
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.list_chats", new_callable=AsyncMock)
+    def test_chats_unauthorized_exits_2(self, mock_list_chats, mock_create):
+        client = AsyncMock()
+        mock_create.return_value = client
+        mock_list_chats.side_effect = UnauthorizedError(None, None)
+
+        result = runner.invoke(app, ["chats"])
+
+        assert result.exit_code == 2
+        assert "Not authenticated" in result.output
+
+
 class TestRead:
     @patch("tgcli.client.create_client")
     @patch("tgcli.client.read_messages", new_callable=AsyncMock)

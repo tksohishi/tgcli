@@ -192,6 +192,9 @@ def chats(
         stderr.print(f"[red]Configuration error:[/red] {e}")
         stderr.print("Run `tg auth` to set up.")
         raise typer.Exit(1)
+    except UnauthorizedError:
+        stderr.print("[red]Not authenticated.[/red] Run `tg auth login` first.")
+        raise typer.Exit(2)
     except Exception as e:
         stderr.print(f"[red]Failed to list chats:[/red] {e}")
         raise typer.Exit(1)
