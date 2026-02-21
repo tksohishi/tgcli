@@ -15,7 +15,7 @@ Give AI agents (Claude Code, Codex, Cursor, etc.) direct access to your Telegram
 Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-uv tool install tgcli
+uv tool install pytgcli
 ```
 
 Or install from source:

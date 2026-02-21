@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "tgcli"
+name = "pytgcli"
 version = "0.6.1"
 description = "CLI tool to read Telegram messages from the terminal"
 readme = "README.md"

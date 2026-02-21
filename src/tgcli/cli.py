@@ -12,7 +12,7 @@ from telethon.errors import UnauthorizedError
 
 def _version_callback(value: bool) -> None:
     if value:
-        print(version("tgcli"))
+        print(version("pytgcli"))
         raise typer.Exit()
 
 
