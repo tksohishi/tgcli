@@ -6,7 +6,7 @@ from telethon import TelegramClient
 from telethon.sessions import StringSession
 
 from tgcli.config import TelegramConfig, load_config
-from tgcli.formatting import MessageData
+from tgcli.formatting import ChatData, MessageData
 from tgcli.session import load_session
 
 
@@ -40,15 +40,33 @@ async def _resolve_entity(client: TelegramClient, name: str):
     if name.lower() == "me":
         return await client.get_me()
 
-    try:
-        return await client.get_entity(name)
-    except Exception:  # noqa: S110
-        pass
+    # get_entity handles @usernames, phone numbers, and numeric IDs directly.
+    # Skip it for plain names to avoid matching unrelated usernames
+    # (e.g. "otaku" resolving to @Otaku instead of the OtakuLabs group).
+    if name.startswith("@") or name.startswith("+") or name.lstrip("-").isdigit():
+        try:
+            return await client.get_entity(name)
+        except Exception:  # noqa: S110
+            pass
 
     name_lower = name.lower()
+    candidates: list[tuple[int, object]] = []
     async for dialog in client.iter_dialogs():
-        if name_lower in dialog.name.lower():
-            return dialog.entity
+        dialog_lower = dialog.name.lower()
+        if name_lower not in dialog_lower:
+            continue
+        # Rank: exact match (0), starts-with (1), shorter name (2), longer (3)
+        if dialog_lower == name_lower:
+            rank = 0
+        elif dialog_lower.startswith(name_lower):
+            rank = 1
+        else:
+            rank = 2
+        candidates.append((rank, len(dialog.name), dialog.entity))
+
+    if candidates:
+        candidates.sort(key=lambda c: (c[0], c[1]))
+        return candidates[0][2]
 
     raise ValueError(f'Cannot find any chat or user matching "{name}"')
 
@@ -62,6 +80,44 @@ def _msg_to_data(msg, chat_name: str, sender_name: str) -> MessageData:
         date=msg.date,
         reply_to_msg_id=msg.reply_to.reply_to_msg_id if msg.reply_to else None,
     )
+
+
+def _chat_type(entity) -> str:
+    """Determine the chat type from a Telethon entity."""
+    cls = type(entity).__name__
+    if cls == "User":
+        return "user"
+    if cls == "Channel":
+        if getattr(entity, "megagroup", False):
+            return "group"
+        return "channel"
+    return "group"
+
+
+async def list_chats(
+    client: TelegramClient,
+    *,
+    filter_name: str | None = None,
+    limit: int = 50,
+) -> list[ChatData]:
+    """List dialogs, optionally filtered by name substring."""
+    filter_lower = filter_name.lower() if filter_name else None
+    results: list[ChatData] = []
+    async for dialog in client.iter_dialogs():
+        if filter_lower and filter_lower not in dialog.name.lower():
+            continue
+        results.append(
+            ChatData(
+                name=dialog.name,
+                chat_type=_chat_type(dialog.entity),
+                unread_count=dialog.unread_count,
+                pinned=dialog.pinned,
+                date=dialog.date,
+            )
+        )
+        if len(results) >= limit:
+            break
+    return results
 
 
 async def search_messages(

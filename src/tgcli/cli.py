@@ -177,6 +177,49 @@ def _parse_date(value: str) -> datetime:
 
 
 @app.command()
+def chats(
+    filter_: Annotated[
+        str | None, typer.Option("--filter", help="Fuzzy filter by chat name.")
+    ] = None,
+    limit: Annotated[int, typer.Option(help="Max chats to list.")] = 50,
+    pretty: Annotated[
+        bool, typer.Option("--pretty", help="Rich table output.")
+    ] = False,
+) -> None:
+    """List your Telegram chats."""
+    from tgcli.client import create_client, list_chats
+
+    async def _run():
+        client = create_client()
+        async with client:
+            return await list_chats(client, filter_name=filter_, limit=limit)
+
+    try:
+        results = asyncio.run(_run())
+    except SystemExit as e:
+        stderr.print(f"[red]Configuration error:[/red] {e}")
+        stderr.print("Run `tg auth` to set up.")
+        raise typer.Exit(1)
+    except Exception as e:
+        stderr.print(f"[red]Failed to list chats:[/red] {e}")
+        raise typer.Exit(1)
+
+    if not results:
+        stdout.print("No chats found.")
+        return
+
+    if pretty:
+        from tgcli.formatting import format_chats_table
+
+        stdout.print(format_chats_table(results))
+    else:
+        from tgcli.formatting import format_chat_line
+
+        for chat in results:
+            print(format_chat_line(chat))
+
+
+@app.command()
 def search(
     query: Annotated[str, typer.Argument()] = "",
     in_: Annotated[

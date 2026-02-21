@@ -9,6 +9,15 @@ from rich.text import Text
 
 
 @dataclass(frozen=True)
+class ChatData:
+    name: str
+    chat_type: str
+    unread_count: int
+    pinned: bool
+    date: datetime | None
+
+
+@dataclass(frozen=True)
 class MessageData:
     id: int
     text: str
@@ -86,6 +95,35 @@ def format_context(
             output.append(line)
 
     return output
+
+
+def format_chat_line(chat: ChatData) -> str:
+    """Format a chat as a single line: name."""
+    return chat.name
+
+
+def format_chat_jsonl(chat: ChatData) -> str:
+    """Serialize a ChatData to a single JSON line."""
+    d = asdict(chat)
+    if chat.date:
+        d["date"] = chat.date.isoformat()
+    return json.dumps(d, ensure_ascii=False)
+
+
+def format_chats_table(chats: list[ChatData]) -> Table:
+    """Build a Rich Table for chat listing."""
+    table = Table(show_header=True, header_style="bold")
+    table.add_column("Name")
+    table.add_column("Type", style="dim")
+    table.add_column("Unread", justify="right")
+    table.add_column("Last message", style="dim", no_wrap=True)
+
+    for chat in chats:
+        unread = str(chat.unread_count) if chat.unread_count else ""
+        date = chat.date.strftime("%Y-%m-%d") if chat.date else ""
+        table.add_row(chat.name, chat.chat_type, unread, date)
+
+    return table
 
 
 def format_auth_status(

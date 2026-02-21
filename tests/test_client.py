@@ -93,13 +93,13 @@ class TestSearchMessages:
         assert len(results) == 1
 
     async def test_search_from_filters_client_side(self, client):
-        sender_entity = _mock_entity("Alice")
-        sender_entity.id = 42
+        dialog = _mock_dialog("Alice")
+        dialog.entity.id = 42
         mine = _mock_msg(1, "my msg", sender_name="Me")
         mine.sender_id = 99
         theirs = _mock_msg(2, "their msg", sender_name="Alice")
         theirs.sender_id = 42
-        client.get_entity = AsyncMock(return_value=sender_entity)
+        client.iter_dialogs = MagicMock(return_value=_async_iter([dialog]))
         client.iter_messages = MagicMock(return_value=_async_iter([mine, theirs]))
 
         results = await search_messages(client, "q", from_="Alice")
@@ -111,35 +111,38 @@ class TestSearchMessages:
         assert results[0].text == "their msg"
 
     async def test_search_with_in(self, client):
-        group_entity = _mock_entity("Work", is_group=True)
-        client.get_entity = AsyncMock(return_value=group_entity)
+        dialog = _mock_dialog("Work")
+        client.iter_dialogs = MagicMock(return_value=_async_iter([dialog]))
         client.iter_messages = MagicMock(return_value=_async_iter([]))
 
         await search_messages(client, "q", in_="Work")
 
-        client.get_entity.assert_called_with("Work")
         call_kwargs = client.iter_messages.call_args
-        assert call_kwargs[0][0] == group_entity
+        assert call_kwargs[0][0] == dialog.entity
         assert call_kwargs[1].get("from_user") is None
 
     async def test_search_with_in_and_from(self, client):
-        group_entity = _mock_entity("Work", is_group=True)
-        sender_entity = _mock_entity("Alice")
-        client.get_entity = AsyncMock(side_effect=[group_entity, sender_entity])
+        work_dialog = _mock_dialog("Work")
+        alice_dialog = _mock_dialog("Alice")
+        client.iter_dialogs = MagicMock(
+            side_effect=[
+                _async_iter([work_dialog]),
+                _async_iter([alice_dialog]),
+            ]
+        )
         client.iter_messages = MagicMock(return_value=_async_iter([]))
 
         await search_messages(client, "q", in_="Work", from_="Alice")
 
-        assert client.get_entity.call_count == 2
         call_kwargs = client.iter_messages.call_args
-        assert call_kwargs[0][0] == group_entity
-        assert call_kwargs[1]["from_user"] == sender_entity
+        assert call_kwargs[0][0] == work_dialog.entity
+        assert call_kwargs[1]["from_user"] == alice_dialog.entity
 
     async def test_search_without_query(self, client):
-        entity = _mock_entity("Alice")
+        dialog = _mock_dialog("Alice")
         msg = _mock_msg(1, "hello")
-        msg.sender_id = entity.id
-        client.get_entity = AsyncMock(return_value=entity)
+        msg.sender_id = dialog.entity.id
+        client.iter_dialogs = MagicMock(return_value=_async_iter([dialog]))
         client.iter_messages = MagicMock(return_value=_async_iter([msg]))
 
         results = await search_messages(client, from_="Alice")
@@ -169,7 +172,8 @@ class TestReadMessages:
     @pytest.fixture()
     def client(self):
         c = AsyncMock()
-        c.get_entity = AsyncMock(return_value=_mock_entity("Group", is_group=True))
+        group_dialog = _mock_dialog("Group")
+        c.iter_dialogs = MagicMock(side_effect=lambda: _async_iter([group_dialog]))
         return c
 
     async def test_basic_read(self, client):
@@ -211,7 +215,7 @@ class TestReadMessages:
 
         await read_messages(client, "Group")
 
-        client.get_entity.assert_called_with("Group")
+        client.iter_dialogs.assert_called()
 
     async def test_read_reverse(self, client):
         msgs = [_mock_msg(1, "oldest"), _mock_msg(2, "newest")]
@@ -228,7 +232,8 @@ class TestGetContext:
     @pytest.fixture()
     def client(self):
         c = AsyncMock()
-        c.get_entity = AsyncMock(return_value=_mock_entity("Group", is_group=True))
+        group_dialog = _mock_dialog("Group")
+        c.iter_dialogs = MagicMock(side_effect=lambda: _async_iter([group_dialog]))
         return c
 
     async def test_returns_messages_around_target(self, client):
@@ -301,6 +306,16 @@ class TestGetContext:
 
         assert replied_to is not None
         assert replied_to.text == "original"
+
+
+def _mock_dialog(name: str, *, pinned: bool = False):
+    entity = _mock_entity(name, is_group=True)
+    return SimpleNamespace(name=name, pinned=pinned, entity=entity)
+
+
+def _mock_iter_dialogs(*names: str):
+    dialogs = [_mock_dialog(n) for n in names]
+    return MagicMock(return_value=_async_iter(dialogs))
 
 
 async def _async_iter(items):
