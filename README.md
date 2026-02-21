@@ -9,7 +9,6 @@ Give AI agents (Claude Code, Codex, Cursor, etc.) direct access to your Telegram
 - **Fuzzy resolution** — chat and user names match by display name (no numeric IDs required)
 - **`--pretty` for humans** — Rich tables when you want to read output yourself
 - **Secure session storage** — Telethon session key stored in macOS Keychain via `keyring`
-- **1Password integration** — API credentials can be `op://` references resolved at runtime
 
 ## Installation
 
@@ -132,13 +131,6 @@ Config lives at `~/.config/tgcli/config.toml`:
 ```toml
 api_id = 123456
 api_hash = "your_api_hash"
-```
-
-Values can be [1Password CLI](https://developer.1password.com/docs/cli/) references:
-
-```toml
-api_id = "op://Personal/Telegram API/api_id"
-api_hash = "op://Personal/Telegram API/api_hash"
 ```
 
 Alternatively, set `TELEGRAM_API_ID` and `TELEGRAM_API_HASH` environment variables.

@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-from unittest.mock import patch
-
 import pytest
 
-from tgcli.config import TelegramConfig, load_config, write_config, write_config_op
+from tgcli.config import TelegramConfig, load_config, write_config
 
 
 def test_load_from_toml(tmp_path):
@@ -47,21 +45,6 @@ def test_env_fills_missing_toml_fields(tmp_path, monkeypatch):
     assert result == TelegramConfig(api_id=999, api_hash="fromenv")
 
 
-def test_op_resolution(tmp_path):
-    cfg = tmp_path / "config.toml"
-    cfg.write_text('api_id = "op://vault/item/id"\napi_hash = "op://vault/item/hash"\n')
-
-    with patch("tgcli.config.subprocess.run") as mock_run:
-        mock_run.side_effect = [
-            type("Result", (), {"stdout": "  42  \n"})(),
-            type("Result", (), {"stdout": "ophash\n"})(),
-        ]
-        result = load_config(config_path=cfg)
-
-    assert result == TelegramConfig(api_id=42, api_hash="ophash")
-    assert mock_run.call_count == 2
-
-
 def test_missing_credentials_exits(tmp_path, monkeypatch):
     cfg = tmp_path / "nonexistent.toml"
     monkeypatch.delenv("TELEGRAM_API_ID", raising=False)
@@ -89,22 +72,3 @@ def test_write_config_overwrites_existing(tmp_path):
 
     result = load_config(config_path=cfg)
     assert result == TelegramConfig(api_id=999, api_hash="newhash")
-
-
-def test_write_config_op_creates_op_references(tmp_path):
-    cfg = tmp_path / "config.toml"
-
-    with patch("tgcli.config.subprocess.run") as mock_run:
-        write_config_op(
-            123, "hash123", vault="MyVault", item_title="TG", config_path=cfg
-        )
-
-    assert cfg.exists()
-    content = cfg.read_text()
-    assert "op://MyVault/TG/api_id" in content
-    assert "op://MyVault/TG/api_hash" in content
-    mock_run.assert_called_once()
-    args = mock_run.call_args[0][0]
-    assert "op" in args
-    assert "api_id[text]=123" in args
-    assert "api_hash[text]=hash123" in args

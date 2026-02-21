@@ -127,66 +127,10 @@ class TestAuthSmart:
             "phone": None,
             "session_exists": False,
         }
-        # Input: Enter to open browser, api_id, api_hash, decline 1Password
-        result = runner.invoke(app, ["auth"], input="\n123456\nabc123\nn\n")
+        # Input: Enter to open browser, api_id, api_hash
+        result = runner.invoke(app, ["auth"], input="\n123456\nabc123\n")
 
         assert result.exit_code == 0
-        mock_write.assert_called_once_with(123456, "abc123")
-
-    @patch("webbrowser.open")
-    @patch("tgcli.auth.login", new_callable=AsyncMock)
-    @patch("tgcli.auth.get_status", new_callable=AsyncMock)
-    @patch("tgcli.config.write_config_op")
-    @patch(
-        "tgcli.config.load_config",
-        side_effect=[SystemExit("credentials not found"), None],
-    )
-    def test_auth_no_config_stores_in_1password(
-        self, mock_load, mock_write_op, mock_status, mock_login, mock_wb_open
-    ):
-        mock_write_op.return_value = "/tmp/config.toml"
-        mock_status.return_value = {
-            "authenticated": False,
-            "phone": None,
-            "session_exists": False,
-        }
-        # Input: Enter to open browser, api_id, api_hash, accept 1Password
-        result = runner.invoke(app, ["auth"], input="\n123456\nabc123\ny\n")
-
-        assert result.exit_code == 0
-        mock_write_op.assert_called_once_with(123456, "abc123")
-
-    @patch("webbrowser.open")
-    @patch("tgcli.auth.login", new_callable=AsyncMock)
-    @patch("tgcli.auth.get_status", new_callable=AsyncMock)
-    @patch("tgcli.config.write_config")
-    @patch(
-        "tgcli.config.write_config_op", side_effect=FileNotFoundError("op not found")
-    )
-    @patch(
-        "tgcli.config.load_config",
-        side_effect=[SystemExit("credentials not found"), None],
-    )
-    def test_auth_1password_fails_falls_back_to_plain(
-        self,
-        mock_load,
-        mock_write_op,
-        mock_write,
-        mock_status,
-        mock_login,
-        mock_wb_open,
-    ):
-        mock_write.return_value = "/tmp/config.toml"
-        mock_status.return_value = {
-            "authenticated": False,
-            "phone": None,
-            "session_exists": False,
-        }
-        # Input: open browser, api_id, api_hash, accept 1Password (fails)
-        result = runner.invoke(app, ["auth"], input="\n123456\nabc123\ny\n")
-
-        assert result.exit_code == 0
-        assert "plain text" in result.output
         mock_write.assert_called_once_with(123456, "abc123")
 
     @patch("tgcli.config.load_config", side_effect=ValueError("invalid literal"))

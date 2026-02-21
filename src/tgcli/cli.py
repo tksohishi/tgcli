@@ -49,7 +49,7 @@ def auth_default(ctx: typer.Context) -> None:
     if ctx.invoked_subcommand is not None:
         return
 
-    from tgcli.config import CONFIG_PATH, load_config, write_config, write_config_op
+    from tgcli.config import CONFIG_PATH, load_config, write_config
     from tgcli.formatting import format_auth_status
 
     # Step 1: ensure config exists
@@ -66,15 +66,7 @@ def auth_default(ctx: typer.Context) -> None:
         webbrowser.open("https://my.telegram.org/apps")
         api_id = typer.prompt("\nAPI ID", type=int)
         api_hash = typer.prompt("API Hash", type=str)
-        if typer.confirm("\nStore credentials in 1Password?", default=False):
-            try:
-                path = write_config_op(api_id, api_hash)
-            except Exception as e:
-                stderr.print(f"[red]1Password failed:[/red] {e}")
-                stderr.print("Saving as plain text instead.")
-                path = write_config(api_id, api_hash)
-        else:
-            path = write_config(api_id, api_hash)
+        path = write_config(api_id, api_hash)
         stderr.print(f"Config written to {path}\n")
     except Exception as e:
         stderr.print(f"[red]Config error:[/red] {e}")

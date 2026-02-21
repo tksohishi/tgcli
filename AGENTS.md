@@ -7,7 +7,7 @@ src/tgcli/
   cli.py          # Typer app, thin entrypoints
   auth.py         # Login/logout/status logic
   client.py       # Telethon wrapper (search, read, context)
-  config.py       # Config loading (TOML + env vars + op://)
+  config.py       # Config loading (TOML + env vars)
   formatting.py   # Pure output formatting functions (no I/O)
   session.py      # Keychain-backed StringSession via keyring
 tests/              # pytest + pytest-asyncio, Telethon fully mocked
