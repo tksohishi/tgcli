@@ -181,7 +181,7 @@ def chats(
     filter_: Annotated[
         str | None, typer.Option("--filter", help="Fuzzy filter by chat name.")
     ] = None,
-    limit: Annotated[int, typer.Option(help="Max chats to list.")] = 50,
+    limit: Annotated[int, typer.Option(help="Max chats to list.")] = 20,
     pretty: Annotated[
         bool, typer.Option("--pretty", help="Rich table output.")
     ] = False,
@@ -223,8 +223,8 @@ def chats(
 def search(
     query: Annotated[str, typer.Argument()] = "",
     in_: Annotated[
-        str | None, typer.Option("--in", help="Chat or group to search within.")
-    ] = None,
+        str, typer.Option("--in", help="Chat or group to search within.")
+    ] = ...,
     from_: Annotated[
         str | None, typer.Option("--from", help="Filter by sender.")
     ] = None,
@@ -239,31 +239,11 @@ def search(
         bool, typer.Option("--pretty", help="Rich table output instead of JSONL.")
     ] = False,
 ) -> None:
-    """Search messages across chats."""
+    """Search messages in a chat."""
     from tgcli.client import create_client, search_messages
 
-    global_search = not in_
-    if global_search and not from_:
-        stderr.print(
-            "[dim]Tip: global search may not include recent messages."
-            " Use --in to search within a specific chat"
-            " and/or --from to filter by sender.[/dim]"
-        )
-    elif global_search and from_:
-        stderr.print(
-            "[dim]Tip: --from in global search filters client-side"
-            " (Telegram API limitation). This may be slow.[/dim]"
-        )
-
     try:
-        if after:
-            after_dt = _parse_date(after)
-        elif global_search:
-            after_dt = datetime.now(UTC).replace(
-                year=datetime.now(UTC).year - 1, hour=0, minute=0, second=0
-            )
-        else:
-            after_dt = None
+        after_dt = _parse_date(after) if after else None
         before_dt = _parse_date(before) if before else None
     except ValueError as e:
         stderr.print(f"[red]Invalid date format:[/red] {e}")

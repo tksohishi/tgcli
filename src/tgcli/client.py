@@ -98,7 +98,7 @@ async def list_chats(
     client: TelegramClient,
     *,
     filter_name: str | None = None,
-    limit: int = 50,
+    limit: int = 20,
 ) -> list[ChatData]:
     """List dialogs, optionally filtered by name substring."""
     filter_lower = filter_name.lower() if filter_name else None
@@ -124,43 +124,33 @@ async def search_messages(
     client: TelegramClient,
     query: str = "",
     *,
-    in_: str | None = None,
+    in_: str,
     from_: str | None = None,
     limit: int = 20,
     after: datetime | None = None,
     before: datetime | None = None,
 ) -> list[MessageData]:
-    """Search messages, optionally scoped to a chat and/or sender."""
-    entity = None
+    """Search messages in a chat, optionally filtered by sender."""
+    entity = await _resolve_entity(client, in_)
     from_user = None
-    if in_:
-        entity = await _resolve_entity(client, in_)
     if from_:
         from_user = await _resolve_entity(client, from_)
 
     # Telegram's API is unreliable when combining search + from_user.
-    # Strategy: pass from_user server-side to narrow results, filter text
-    # client-side. For global search (no entity), from_user doesn't work
-    # at all, so both filters are client-side.
-    use_from_user = from_user if entity else None
-    use_search = query if not (entity and from_user) else ""
-    filter_sender_id = from_user.id if from_user and not entity else None
-    filter_query = query.lower() if entity and from_user and query else None
-    needs_client_filter = filter_sender_id is not None or filter_query is not None
+    # Pass from_user server-side to narrow results, filter text client-side.
+    use_search = "" if from_user else query
+    filter_query = query.lower() if from_user and query else None
 
     results: list[MessageData] = []
     async for msg in client.iter_messages(
         entity,
         search=use_search,
-        limit=limit if not needs_client_filter else None,
+        limit=limit if not filter_query else None,
         offset_date=before,
-        from_user=use_from_user,
+        from_user=from_user,
     ):
         if after and msg.date and msg.date < after:
             break
-
-        if filter_sender_id and msg.sender_id != filter_sender_id:
-            continue
 
         if filter_query and filter_query not in (msg.text or "").lower():
             continue

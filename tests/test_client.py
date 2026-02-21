@@ -63,13 +63,15 @@ class TestSearchMessages:
     @pytest.fixture()
     def client(self):
         c = AsyncMock()
+        group_dialog = _mock_dialog("Group")
+        c.iter_dialogs = MagicMock(side_effect=lambda: _async_iter([group_dialog]))
         return c
 
     async def test_basic_search(self, client):
         msgs = [_mock_msg(1, "found it"), _mock_msg(2, "also here")]
         client.iter_messages = MagicMock(return_value=_async_iter(msgs))
 
-        results = await search_messages(client, "found")
+        results = await search_messages(client, "found", in_="Group")
 
         assert len(results) == 2
         assert results[0].text == "found it"
@@ -84,42 +86,31 @@ class TestSearchMessages:
         client.get_me = AsyncMock(return_value=me_entity)
         client.iter_messages = MagicMock(return_value=_async_iter([msg]))
 
-        results = await search_messages(client, "q", from_="me")
+        results = await search_messages(client, "my message", in_="Group", from_="me")
 
         client.get_me.assert_called_once()
-        call_kwargs = client.iter_messages.call_args
-        assert call_kwargs[0][0] is None
-        assert call_kwargs[1]["from_user"] is None
         assert len(results) == 1
 
-    async def test_search_from_filters_client_side(self, client):
-        dialog = _mock_dialog("Alice")
-        dialog.entity.id = 42
-        mine = _mock_msg(1, "my msg", sender_name="Me")
-        mine.sender_id = 99
-        theirs = _mock_msg(2, "their msg", sender_name="Alice")
-        theirs.sender_id = 42
-        client.iter_dialogs = MagicMock(return_value=_async_iter([dialog]))
-        client.iter_messages = MagicMock(return_value=_async_iter([mine, theirs]))
+    async def test_search_with_from_filters_text_client_side(self, client):
+        alice_dialog = _mock_dialog("Alice")
+        client.iter_dialogs = MagicMock(
+            side_effect=[
+                _async_iter([_mock_dialog("Group")]),
+                _async_iter([alice_dialog]),
+            ]
+        )
+        match = _mock_msg(1, "hello world")
+        miss = _mock_msg(2, "goodbye")
+        client.iter_messages = MagicMock(return_value=_async_iter([match, miss]))
 
-        results = await search_messages(client, "q", from_="Alice")
+        results = await search_messages(client, "hello", in_="Group", from_="Alice")
 
-        call_kwargs = client.iter_messages.call_args
-        assert call_kwargs[0][0] is None
-        assert call_kwargs[1]["from_user"] is None
         assert len(results) == 1
-        assert results[0].text == "their msg"
-
-    async def test_search_with_in(self, client):
-        dialog = _mock_dialog("Work")
-        client.iter_dialogs = MagicMock(return_value=_async_iter([dialog]))
-        client.iter_messages = MagicMock(return_value=_async_iter([]))
-
-        await search_messages(client, "q", in_="Work")
-
-        call_kwargs = client.iter_messages.call_args
-        assert call_kwargs[0][0] == dialog.entity
-        assert call_kwargs[1].get("from_user") is None
+        assert results[0].text == "hello world"
+        # from_user passed server-side, search text filtered client-side
+        call_kwargs = client.iter_messages.call_args[1]
+        assert call_kwargs["search"] == ""
+        assert call_kwargs["from_user"] == alice_dialog.entity
 
     async def test_search_with_in_and_from(self, client):
         work_dialog = _mock_dialog("Work")
@@ -139,18 +130,20 @@ class TestSearchMessages:
         assert call_kwargs[1]["from_user"] == alice_dialog.entity
 
     async def test_search_without_query(self, client):
-        dialog = _mock_dialog("Alice")
+        alice_dialog = _mock_dialog("Alice")
         msg = _mock_msg(1, "hello")
-        msg.sender_id = dialog.entity.id
-        client.iter_dialogs = MagicMock(return_value=_async_iter([dialog]))
+        msg.sender_id = alice_dialog.entity.id
+        client.iter_dialogs = MagicMock(
+            side_effect=[
+                _async_iter([_mock_dialog("Group")]),
+                _async_iter([alice_dialog]),
+            ]
+        )
         client.iter_messages = MagicMock(return_value=_async_iter([msg]))
 
-        results = await search_messages(client, from_="Alice")
+        results = await search_messages(client, in_="Group", from_="Alice")
 
         assert len(results) == 1
-        client.iter_messages.assert_called_once()
-        call_kwargs = client.iter_messages.call_args[1]
-        assert call_kwargs["search"] == ""
 
     async def test_search_respects_after(self, client):
         old_date = datetime(2025, 1, 1, tzinfo=UTC)
@@ -162,7 +155,7 @@ class TestSearchMessages:
         client.iter_messages = MagicMock(return_value=_async_iter(msgs))
         cutoff = datetime(2025, 3, 1, tzinfo=UTC)
 
-        results = await search_messages(client, "q", after=cutoff)
+        results = await search_messages(client, "q", in_="Group", after=cutoff)
 
         assert len(results) == 1
         assert results[0].text == "new"

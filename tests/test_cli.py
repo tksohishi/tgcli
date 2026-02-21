@@ -212,7 +212,7 @@ class TestSearch:
                 date=datetime(2025, 6, 15, 12, 0, tzinfo=UTC),
             ),
         ]
-        result = runner.invoke(app, ["search", "hello", "--pretty"])
+        result = runner.invoke(app, ["search", "hello", "--in", "Group", "--pretty"])
 
         assert result.exit_code == 0
         assert "hello world" in result.output
@@ -238,7 +238,7 @@ class TestSearch:
                 date=datetime(2025, 6, 15, 13, 0, tzinfo=UTC),
             ),
         ]
-        result = runner.invoke(app, ["search", "hello"])
+        result = runner.invoke(app, ["search", "hello", "--in", "Group"])
 
         assert result.exit_code == 0
         jsonl = [
@@ -258,19 +258,23 @@ class TestSearch:
         mock_create.return_value = client
         mock_search.return_value = []
 
-        result = runner.invoke(app, ["search", "nothing"])
+        result = runner.invoke(app, ["search", "nothing", "--in", "Group"])
 
         assert result.exit_code == 0
         assert "No messages found" in result.output
 
     def test_search_invalid_after_date(self):
-        result = runner.invoke(app, ["search", "hello", "--after", "2025-99-99"])
+        result = runner.invoke(
+            app, ["search", "hello", "--in", "G", "--after", "2025-99-99"]
+        )
 
         assert result.exit_code == 1
         assert "Invalid date format" in result.output
 
     def test_search_invalid_before_date(self):
-        result = runner.invoke(app, ["search", "hello", "--before", "not-a-date"])
+        result = runner.invoke(
+            app, ["search", "hello", "--in", "G", "--before", "not-a-date"]
+        )
 
         assert result.exit_code == 1
         assert "Invalid date format" in result.output
@@ -282,7 +286,7 @@ class TestSearch:
         mock_create.return_value = client
         mock_search.side_effect = UnauthorizedError(None, None)
 
-        result = runner.invoke(app, ["search", "hello"])
+        result = runner.invoke(app, ["search", "hello", "--in", "Group"])
 
         assert result.exit_code == 2
         assert "Not authenticated" in result.output
@@ -291,69 +295,31 @@ class TestSearch:
         "tgcli.client.create_client", side_effect=SystemExit("credentials not found")
     )
     def test_search_config_error_exits_1(self, mock_create):
-        result = runner.invoke(app, ["search", "hello"])
+        result = runner.invoke(app, ["search", "hello", "--in", "Group"])
 
         assert result.exit_code == 1
         assert "Configuration error" in result.output
 
-    @patch("tgcli.client.create_client")
-    @patch("tgcli.client.search_messages", new_callable=AsyncMock)
-    def test_search_global_shows_hint(self, mock_search, mock_create):
-        client = AsyncMock()
-        mock_create.return_value = client
-        mock_search.return_value = []
-
+    def test_search_requires_in(self):
         result = runner.invoke(app, ["search", "hello"])
 
-        assert "global search may not include recent messages" in result.output
+        assert result.exit_code == 2
 
     @patch("tgcli.client.create_client")
     @patch("tgcli.client.search_messages", new_callable=AsyncMock)
-    def test_search_with_in_no_hint(self, mock_search, mock_create):
+    def test_search_from_with_in(self, mock_search, mock_create):
         client = AsyncMock()
         mock_create.return_value = client
         mock_search.return_value = []
-
-        result = runner.invoke(app, ["search", "hello", "--in", "Work"])
-
-        assert "global search" not in result.output
-
-    @patch("tgcli.client.create_client")
-    @patch("tgcli.client.search_messages", new_callable=AsyncMock)
-    def test_search_from_without_query(self, mock_search, mock_create):
-        client = AsyncMock()
-        mock_create.return_value = client
-        mock_search.return_value = [
-            MessageData(
-                id=1,
-                text="hello",
-                chat_name="Alice",
-                sender_name="Alice",
-                date=datetime(2025, 6, 15, 12, 0, tzinfo=UTC),
-            ),
-        ]
-        result = runner.invoke(app, ["search", "--from", "Alice"])
+        result = runner.invoke(
+            app, ["search", "hello", "--in", "Work", "--from", "Alice"]
+        )
 
         assert result.exit_code == 0
         mock_search.assert_awaited_once()
         call_kwargs = mock_search.call_args[1]
         assert call_kwargs["from_"] == "Alice"
-        assert call_kwargs["in_"] is None
-
-    @patch("tgcli.client.create_client")
-    @patch("tgcli.client.search_messages", new_callable=AsyncMock)
-    def test_search_from_with_query(self, mock_search, mock_create):
-        client = AsyncMock()
-        mock_create.return_value = client
-        mock_search.return_value = []
-        result = runner.invoke(app, ["search", "hello", "--from", "Alice"])
-
-        assert result.exit_code == 0
-        mock_search.assert_awaited_once()
-        call_kwargs = mock_search.call_args
-        assert call_kwargs[0][1] == "hello"
-        assert call_kwargs[1]["from_"] == "Alice"
-        assert call_kwargs[1]["in_"] is None
+        assert call_kwargs["in_"] == "Work"
 
     @patch("tgcli.client.create_client")
     @patch("tgcli.client.search_messages", new_callable=AsyncMock)
