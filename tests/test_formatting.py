@@ -7,9 +7,9 @@ from rich.console import Console
 
 from tgcli.formatting import (
     format_auth_status,
+    format_context,
     format_message_jsonl,
     format_search_results,
-    format_thread,
 )
 
 
@@ -78,14 +78,14 @@ class TestFormatSearchResults:
         assert "Date" in output  # header still present
 
 
-class TestFormatThread:
+class TestFormatContext:
     def test_target_message_present(self, make_message):
         msgs = [
             make_message(id=1, text="before"),
             make_message(id=2, text="TARGET"),
             make_message(id=3, text="after"),
         ]
-        output = _render(format_thread(msgs, target_id=2))
+        output = _render(format_context(msgs, target_id=2))
 
         assert "TARGET" in output
         assert "before" in output
@@ -94,7 +94,7 @@ class TestFormatThread:
     def test_replied_to_shown(self, make_message):
         target = make_message(id=2, text="my reply", reply_to_msg_id=1)
         replied = make_message(id=1, text="original message", sender_name="Bob")
-        output = _render(format_thread([target], target_id=2, replied_to=replied))
+        output = _render(format_context([target], target_id=2, replied_to=replied))
 
         assert "original message" in output
         assert ">>" in output

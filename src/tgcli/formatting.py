@@ -58,12 +58,12 @@ def format_search_results(messages: list[MessageData]) -> Table:
     return table
 
 
-def format_thread(
+def format_context(
     messages: list[MessageData],
     target_id: int,
     replied_to: MessageData | None = None,
 ) -> Text:
-    """Build a Rich Text for thread view.
+    """Build a Rich Text for context view.
 
     The target message is highlighted. If replied_to is provided, it's
     shown above the target with a separator.

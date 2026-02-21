@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from tgcli.client import create_client, get_thread_context, search_messages
+from tgcli.client import create_client, get_context, read_messages, search_messages
 
 
 def _mock_entity(name: str, *, is_group: bool = False):
@@ -72,14 +72,42 @@ class TestSearchMessages:
         assert results[0].id == 1
         assert results[1].text == "also here"
 
-    async def test_search_with_from(self, client):
-        chat_entity = _mock_entity("Work", is_group=True)
+    async def test_search_from_only(self, client):
+        chat_entity = _mock_entity("Alice")
         client.get_entity = AsyncMock(return_value=chat_entity)
         client.iter_messages = MagicMock(return_value=_async_iter([]))
 
-        await search_messages(client, "q", from_="Work")
+        await search_messages(client, "q", from_="Alice")
+
+        client.get_entity.assert_called_with("Alice")
+        call_kwargs = client.iter_messages.call_args
+        assert call_kwargs[0][0] == chat_entity
+        assert call_kwargs[1].get("from_user") is None
+
+    async def test_search_with_in(self, client):
+        group_entity = _mock_entity("Work", is_group=True)
+        client.get_entity = AsyncMock(return_value=group_entity)
+        client.iter_messages = MagicMock(return_value=_async_iter([]))
+
+        await search_messages(client, "q", in_="Work")
 
         client.get_entity.assert_called_with("Work")
+        call_kwargs = client.iter_messages.call_args
+        assert call_kwargs[0][0] == group_entity
+        assert call_kwargs[1].get("from_user") is None
+
+    async def test_search_with_in_and_from(self, client):
+        group_entity = _mock_entity("Work", is_group=True)
+        sender_entity = _mock_entity("Alice")
+        client.get_entity = AsyncMock(side_effect=[group_entity, sender_entity])
+        client.iter_messages = MagicMock(return_value=_async_iter([]))
+
+        await search_messages(client, "q", in_="Work", from_="Alice")
+
+        assert client.get_entity.call_count == 2
+        call_kwargs = client.iter_messages.call_args
+        assert call_kwargs[0][0] == group_entity
+        assert call_kwargs[1]["from_user"] == sender_entity
 
     async def test_search_without_query(self, client):
         msgs = [_mock_msg(1, "hello")]
@@ -109,7 +137,66 @@ class TestSearchMessages:
         assert results[0].text == "new"
 
 
-class TestGetThreadContext:
+class TestReadMessages:
+    @pytest.fixture()
+    def client(self):
+        c = AsyncMock()
+        c.get_entity = AsyncMock(return_value=_mock_entity("Group", is_group=True))
+        return c
+
+    async def test_basic_read(self, client):
+        msgs = [_mock_msg(1, "hello"), _mock_msg(2, "world")]
+        client.iter_messages = MagicMock(return_value=_async_iter(msgs))
+
+        results = await read_messages(client, "Group")
+
+        assert len(results) == 2
+        assert results[0].text == "hello"
+        assert results[0].chat_name == "Group"
+        assert results[1].text == "world"
+
+    async def test_read_respects_limit(self, client):
+        msgs = [_mock_msg(i, f"msg{i}") for i in range(5)]
+        client.iter_messages = MagicMock(return_value=_async_iter(msgs))
+
+        results = await read_messages(client, "Group", limit=3)
+
+        assert len(results) == 3
+
+    async def test_read_respects_after(self, client):
+        old_date = datetime(2025, 1, 1, tzinfo=UTC)
+        new_date = datetime(2025, 6, 1, tzinfo=UTC)
+        msgs = [
+            _mock_msg(1, "new", date=new_date),
+            _mock_msg(2, "old", date=old_date),
+        ]
+        client.iter_messages = MagicMock(return_value=_async_iter(msgs))
+        cutoff = datetime(2025, 3, 1, tzinfo=UTC)
+
+        results = await read_messages(client, "Group", after=cutoff)
+
+        assert len(results) == 1
+        assert results[0].text == "new"
+
+    async def test_read_resolves_entity(self, client):
+        client.iter_messages = MagicMock(return_value=_async_iter([]))
+
+        await read_messages(client, "Group")
+
+        client.get_entity.assert_called_with("Group")
+
+    async def test_read_reverse(self, client):
+        msgs = [_mock_msg(1, "oldest"), _mock_msg(2, "newest")]
+        client.iter_messages = MagicMock(return_value=_async_iter(msgs))
+
+        results = await read_messages(client, "Group", reverse=True)
+
+        assert len(results) == 2
+        call_kwargs = client.iter_messages.call_args[1]
+        assert call_kwargs["reverse"] is True
+
+
+class TestGetContext:
     @pytest.fixture()
     def client(self):
         c = AsyncMock()
@@ -129,7 +216,7 @@ class TestGetThreadContext:
         client.iter_messages = MagicMock(side_effect=iter_side_effect)
         client.get_messages = AsyncMock(return_value=None)
 
-        messages, target_id, replied_to = await get_thread_context(
+        messages, target_id, replied_to = await get_context(
             client, "Group", 10, context=5
         )
 
@@ -163,9 +250,7 @@ class TestGetThreadContext:
         client.iter_messages = MagicMock(side_effect=iter_side_effect)
         client.get_messages = AsyncMock(return_value=None)
 
-        messages, target_id, _ = await get_thread_context(
-            client, "Group", 10, context=5
-        )
+        messages, target_id, _ = await get_context(client, "Group", 10, context=5)
 
         ids = [m.id for m in messages]
         assert ids == sorted(ids), f"Messages not chronological: {ids}"
@@ -182,7 +267,7 @@ class TestGetThreadContext:
         )
         client.get_messages = AsyncMock(return_value=reply_source)
 
-        messages, target_id, replied_to = await get_thread_context(
+        messages, target_id, replied_to = await get_context(
             client, "Group", 10, context=5
         )
 

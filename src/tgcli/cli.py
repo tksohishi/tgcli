@@ -171,8 +171,11 @@ def _parse_date(value: str) -> datetime:
 @app.command()
 def search(
     query: Annotated[str, typer.Argument()] = "",
+    in_: Annotated[
+        str | None, typer.Option("--in", help="Chat or group to search within.")
+    ] = None,
     from_: Annotated[
-        str | None, typer.Option("--from", help="Scope search to a chat or person.")
+        str | None, typer.Option("--from", help="Filter by sender.")
     ] = None,
     limit: Annotated[int, typer.Option(help="Max results to return.")] = 20,
     after: Annotated[
@@ -188,6 +191,13 @@ def search(
     """Search messages across chats."""
     from tgcli.client import create_client, search_messages
 
+    if not in_ and not from_:
+        stderr.print(
+            "[dim]Tip: without --in or --from, search only returns your own messages."
+            " Use --in to search within a specific chat"
+            " and/or --from to filter by sender.[/dim]"
+        )
+
     try:
         after_dt = _parse_date(after) if after else None
         before_dt = _parse_date(before) if before else None
@@ -202,6 +212,7 @@ def search(
             return await search_messages(
                 client,
                 query,
+                in_=in_,
                 from_=from_,
                 limit=limit,
                 after=after_dt,
@@ -237,21 +248,91 @@ def search(
 
 
 @app.command()
-def thread(
+def read(
+    chat: Annotated[str, typer.Argument(help="Chat or person to read messages from.")],
+    limit: Annotated[int, typer.Option(help="Max messages to return.")] = 50,
+    head: Annotated[
+        bool, typer.Option("--head", help="Oldest messages first.")
+    ] = False,
+    after: Annotated[
+        str | None, typer.Option(help="Only messages after this date (YYYY-MM-DD).")
+    ] = None,
+    before: Annotated[
+        str | None, typer.Option(help="Only messages before this date (YYYY-MM-DD).")
+    ] = None,
+    pretty: Annotated[
+        bool, typer.Option("--pretty", help="Rich table output instead of JSONL.")
+    ] = False,
+) -> None:
+    """Read recent messages from a chat. Newest first by default (--head for oldest)."""
+    from tgcli.client import create_client, read_messages
+
+    try:
+        after_dt = _parse_date(after) if after else None
+        before_dt = _parse_date(before) if before else None
+    except ValueError as e:
+        stderr.print(f"[red]Invalid date format:[/red] {e}")
+        stderr.print("Expected format: YYYY-MM-DD")
+        raise typer.Exit(1)
+
+    async def _run():
+        client = create_client()
+        async with client:
+            return await read_messages(
+                client,
+                chat,
+                limit=limit,
+                after=after_dt,
+                before=before_dt,
+                reverse=head,
+            )
+
+    try:
+        results = asyncio.run(_run())
+    except SystemExit as e:
+        stderr.print(f"[red]Configuration error:[/red] {e}")
+        stderr.print("Run `tg auth` to set up.")
+        raise typer.Exit(1)
+    except UnauthorizedError:
+        stderr.print("[red]Not authenticated.[/red] Run `tg auth login` first.")
+        raise typer.Exit(2)
+    except Exception as e:
+        stderr.print(f"[red]Read failed:[/red] {e}")
+        raise typer.Exit(1)
+
+    if not results:
+        stdout.print("No messages found.")
+        return
+
+    if pretty:
+        from tgcli.formatting import format_search_results
+
+        stdout.print(format_search_results(results))
+    else:
+        from tgcli.formatting import format_message_jsonl
+
+        for msg in results:
+            print(format_message_jsonl(msg))
+
+
+@app.command()
+def context(
     chat: str,
     message_id: int,
-    context: Annotated[int, typer.Option(help="Messages before/after the target.")] = 5,
+    context_size: Annotated[
+        int, typer.Option("--context", help="Messages before/after the target.")
+    ] = 5,
     pretty: Annotated[
         bool, typer.Option("--pretty", help="Rich text output instead of JSONL.")
     ] = False,
 ) -> None:
     """View a message with surrounding context."""
-    from tgcli.client import create_client, get_thread_context
+    from tgcli.client import create_client, get_context
 
     async def _run():
         client = create_client()
         async with client:
-            return await get_thread_context(client, chat, message_id, context=context)
+            return await get_context(client, chat, message_id, context=context_size)
 
     try:
         messages, target_id, replied_to = asyncio.run(_run())
@@ -263,7 +344,7 @@ def thread(
         stderr.print("[red]Not authenticated.[/red] Run `tg auth login` first.")
         raise typer.Exit(2)
     except Exception as e:
-        stderr.print(f"[red]Thread fetch failed:[/red] {e}")
+        stderr.print(f"[red]Context fetch failed:[/red] {e}")
         raise typer.Exit(1)
 
     if not messages:
@@ -271,9 +352,9 @@ def thread(
         return
 
     if pretty:
-        from tgcli.formatting import format_thread
+        from tgcli.formatting import format_context
 
-        stdout.print(format_thread(messages, target_id, replied_to=replied_to))
+        stdout.print(format_context(messages, target_id, replied_to=replied_to))
     else:
         from tgcli.formatting import format_message_jsonl
 

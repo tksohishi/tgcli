@@ -241,13 +241,15 @@ class TestSearch:
         result = runner.invoke(app, ["search", "hello"])
 
         assert result.exit_code == 0
-        lines = result.output.strip().splitlines()
-        assert len(lines) == 2
-        first = json.loads(lines[0])
-        assert first["text"] == "hello world"
-        assert first["chat_name"] == "Group"
-        second = json.loads(lines[1])
-        assert second["text"] == "second"
+        jsonl = [
+            json.loads(line)
+            for line in result.output.strip().splitlines()
+            if line.startswith("{")
+        ]
+        assert len(jsonl) == 2
+        assert jsonl[0]["text"] == "hello world"
+        assert jsonl[0]["chat_name"] == "Group"
+        assert jsonl[1]["text"] == "second"
 
     @patch("tgcli.client.create_client")
     @patch("tgcli.client.search_messages", new_callable=AsyncMock)
@@ -296,6 +298,28 @@ class TestSearch:
 
     @patch("tgcli.client.create_client")
     @patch("tgcli.client.search_messages", new_callable=AsyncMock)
+    def test_search_global_shows_hint(self, mock_search, mock_create):
+        client = AsyncMock()
+        mock_create.return_value = client
+        mock_search.return_value = []
+
+        result = runner.invoke(app, ["search", "hello"])
+
+        assert "search only returns your own messages" in result.output
+
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.search_messages", new_callable=AsyncMock)
+    def test_search_with_in_no_hint(self, mock_search, mock_create):
+        client = AsyncMock()
+        mock_create.return_value = client
+        mock_search.return_value = []
+
+        result = runner.invoke(app, ["search", "hello", "--in", "Work"])
+
+        assert "global search" not in result.output
+
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.search_messages", new_callable=AsyncMock)
     def test_search_from_without_query(self, mock_search, mock_create):
         client = AsyncMock()
         mock_create.return_value = client
@@ -314,6 +338,7 @@ class TestSearch:
         mock_search.assert_awaited_once()
         call_kwargs = mock_search.call_args[1]
         assert call_kwargs["from_"] == "Alice"
+        assert call_kwargs["in_"] is None
 
     @patch("tgcli.client.create_client")
     @patch("tgcli.client.search_messages", new_callable=AsyncMock)
@@ -328,15 +353,147 @@ class TestSearch:
         call_kwargs = mock_search.call_args
         assert call_kwargs[0][1] == "hello"
         assert call_kwargs[1]["from_"] == "Alice"
+        assert call_kwargs[1]["in_"] is None
 
-
-class TestThread:
     @patch("tgcli.client.create_client")
-    @patch("tgcli.client.get_thread_context", new_callable=AsyncMock)
-    def test_thread_pretty(self, mock_thread, mock_create):
+    @patch("tgcli.client.search_messages", new_callable=AsyncMock)
+    def test_search_in_option(self, mock_search, mock_create):
         client = AsyncMock()
         mock_create.return_value = client
-        mock_thread.return_value = (
+        mock_search.return_value = []
+        result = runner.invoke(app, ["search", "hello", "--in", "Work"])
+
+        assert result.exit_code == 0
+        mock_search.assert_awaited_once()
+        call_kwargs = mock_search.call_args[1]
+        assert call_kwargs["in_"] == "Work"
+        assert call_kwargs["from_"] is None
+
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.search_messages", new_callable=AsyncMock)
+    def test_search_in_and_from(self, mock_search, mock_create):
+        client = AsyncMock()
+        mock_create.return_value = client
+        mock_search.return_value = []
+        result = runner.invoke(
+            app, ["search", "hello", "--in", "Work", "--from", "Alice"]
+        )
+
+        assert result.exit_code == 0
+        mock_search.assert_awaited_once()
+        call_kwargs = mock_search.call_args[1]
+        assert call_kwargs["in_"] == "Work"
+        assert call_kwargs["from_"] == "Alice"
+
+
+class TestRead:
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.read_messages", new_callable=AsyncMock)
+    def test_read_jsonl_default(self, mock_read, mock_create):
+        client = AsyncMock()
+        mock_create.return_value = client
+        mock_read.return_value = [
+            MessageData(
+                id=1,
+                text="hello",
+                chat_name="Group",
+                sender_name="Alice",
+                date=datetime(2025, 6, 15, 12, 0, tzinfo=UTC),
+            ),
+        ]
+        result = runner.invoke(app, ["read", "Group"])
+
+        assert result.exit_code == 0
+        line = json.loads(result.output.strip())
+        assert line["text"] == "hello"
+
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.read_messages", new_callable=AsyncMock)
+    def test_read_pretty(self, mock_read, mock_create):
+        client = AsyncMock()
+        mock_create.return_value = client
+        mock_read.return_value = [
+            MessageData(
+                id=1,
+                text="hello world",
+                chat_name="Group",
+                sender_name="Bob",
+                date=datetime(2025, 6, 15, 12, 0, tzinfo=UTC),
+            ),
+        ]
+        result = runner.invoke(app, ["read", "Group", "--pretty"])
+
+        assert result.exit_code == 0
+        assert "hello world" in result.output
+
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.read_messages", new_callable=AsyncMock)
+    def test_read_no_results(self, mock_read, mock_create):
+        client = AsyncMock()
+        mock_create.return_value = client
+        mock_read.return_value = []
+
+        result = runner.invoke(app, ["read", "Group"])
+
+        assert result.exit_code == 0
+        assert "No messages found" in result.output
+
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.read_messages", new_callable=AsyncMock)
+    def test_read_unauthorized_exits_2(self, mock_read, mock_create):
+        client = AsyncMock()
+        mock_create.return_value = client
+        mock_read.side_effect = UnauthorizedError(None, None)
+
+        result = runner.invoke(app, ["read", "Group"])
+
+        assert result.exit_code == 2
+        assert "Not authenticated" in result.output
+
+    @patch(
+        "tgcli.client.create_client", side_effect=SystemExit("credentials not found")
+    )
+    def test_read_config_error_exits_1(self, mock_create):
+        result = runner.invoke(app, ["read", "Group"])
+
+        assert result.exit_code == 1
+        assert "Configuration error" in result.output
+
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.read_messages", new_callable=AsyncMock)
+    def test_read_head(self, mock_read, mock_create):
+        client = AsyncMock()
+        mock_create.return_value = client
+        mock_read.return_value = [
+            MessageData(
+                id=1,
+                text="oldest",
+                chat_name="Group",
+                sender_name="Alice",
+                date=datetime(2025, 6, 15, 12, 0, tzinfo=UTC),
+            ),
+        ]
+        result = runner.invoke(app, ["read", "Group", "--head"])
+
+        assert result.exit_code == 0
+        mock_read.assert_awaited_once()
+        call_kwargs = mock_read.call_args[1]
+        assert call_kwargs["reverse"] is True
+
+    def test_read_invalid_date(self):
+        result = runner.invoke(app, ["read", "Group", "--after", "not-a-date"])
+
+        assert result.exit_code == 1
+        assert "Invalid date format" in result.output
+
+
+class TestContext:
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.get_context", new_callable=AsyncMock)
+    def test_context_pretty(self, mock_context, mock_create):
+        client = AsyncMock()
+        mock_create.return_value = client
+        mock_context.return_value = (
             [
                 MessageData(
                     id=10,
@@ -349,14 +506,14 @@ class TestThread:
             10,
             None,
         )
-        result = runner.invoke(app, ["thread", "Group", "10", "--pretty"])
+        result = runner.invoke(app, ["context", "Group", "10", "--pretty"])
 
         assert result.exit_code == 0
         assert "target msg" in result.output
 
     @patch("tgcli.client.create_client")
-    @patch("tgcli.client.get_thread_context", new_callable=AsyncMock)
-    def test_thread_jsonl_default(self, mock_thread, mock_create):
+    @patch("tgcli.client.get_context", new_callable=AsyncMock)
+    def test_context_jsonl_default(self, mock_context, mock_create):
         client = AsyncMock()
         mock_create.return_value = client
         replied = MessageData(
@@ -366,7 +523,7 @@ class TestThread:
             sender_name="Bob",
             date=datetime(2025, 6, 15, 11, 0, tzinfo=UTC),
         )
-        mock_thread.return_value = (
+        mock_context.return_value = (
             [
                 MessageData(
                     id=9,
@@ -387,7 +544,7 @@ class TestThread:
             10,
             replied,
         )
-        result = runner.invoke(app, ["thread", "Group", "10"])
+        result = runner.invoke(app, ["context", "Group", "10"])
 
         assert result.exit_code == 0
         lines = result.output.strip().splitlines()
@@ -402,13 +559,13 @@ class TestThread:
         assert "replied_to" not in second
 
     @patch("tgcli.client.create_client")
-    @patch("tgcli.client.get_thread_context", new_callable=AsyncMock)
-    def test_thread_unauthorized_exits_2(self, mock_thread, mock_create):
+    @patch("tgcli.client.get_context", new_callable=AsyncMock)
+    def test_context_unauthorized_exits_2(self, mock_context, mock_create):
         client = AsyncMock()
         mock_create.return_value = client
-        mock_thread.side_effect = UnauthorizedError(None, None)
+        mock_context.side_effect = UnauthorizedError(None, None)
 
-        result = runner.invoke(app, ["thread", "Group", "10"])
+        result = runner.invoke(app, ["context", "Group", "10"])
 
         assert result.exit_code == 2
         assert "Not authenticated" in result.output
@@ -416,8 +573,8 @@ class TestThread:
     @patch(
         "tgcli.client.create_client", side_effect=SystemExit("credentials not found")
     )
-    def test_thread_config_error_exits_1(self, mock_create):
-        result = runner.invoke(app, ["thread", "Group", "10"])
+    def test_context_config_error_exits_1(self, mock_create):
+        result = runner.invoke(app, ["context", "Group", "10"])
 
         assert result.exit_code == 1
         assert "Configuration error" in result.output
@@ -429,7 +586,8 @@ class TestHelp:
 
         assert result.exit_code == 0
         assert "search" in result.output.lower()
-        assert "thread" in result.output.lower()
+        assert "read" in result.output.lower()
+        assert "context" in result.output.lower()
         assert "auth" in result.output.lower()
 
     def test_auth_help(self):

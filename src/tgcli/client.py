@@ -65,14 +65,20 @@ async def search_messages(
     client: TelegramClient,
     query: str = "",
     *,
+    in_: str | None = None,
     from_: str | None = None,
     limit: int = 20,
     after: datetime | None = None,
     before: datetime | None = None,
 ) -> list[MessageData]:
-    """Search messages, optionally scoped to a chat or person via from_."""
+    """Search messages, optionally scoped to a chat and/or sender."""
     entity = None
-    if from_:
+    from_user = None
+    if in_:
+        entity = await _resolve_entity(client, in_)
+        if from_:
+            from_user = await _resolve_entity(client, from_)
+    elif from_:
         entity = await _resolve_entity(client, from_)
 
     results: list[MessageData] = []
@@ -81,6 +87,7 @@ async def search_messages(
         search=query,
         limit=limit,
         offset_date=before,
+        from_user=from_user,
     ):
         if after and msg.date and msg.date < after:
             break
@@ -96,7 +103,43 @@ async def search_messages(
     return results
 
 
-async def get_thread_context(
+async def read_messages(
+    client: TelegramClient,
+    chat: str,
+    *,
+    limit: int = 50,
+    after: datetime | None = None,
+    before: datetime | None = None,
+    reverse: bool = False,
+) -> list[MessageData]:
+    """Read messages from a chat.
+
+    Default order is newest first (tail). Set reverse=True for oldest first (head).
+    """
+    entity = await _resolve_entity(client, chat)
+    chat_name = _get_name(entity)
+
+    results: list[MessageData] = []
+    async for msg in client.iter_messages(
+        entity,
+        limit=limit,
+        offset_date=before,
+        reverse=reverse,
+    ):
+        if after and msg.date and msg.date < after:
+            if reverse:
+                continue
+            break
+
+        sender = await msg.get_sender()
+        results.append(_msg_to_data(msg, chat_name, _get_name(sender)))
+        if len(results) >= limit:
+            break
+
+    return results
+
+
+async def get_context(
     client: TelegramClient,
     chat: str,
     message_id: int,
