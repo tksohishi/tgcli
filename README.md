@@ -1,4 +1,4 @@
-# tgcli — Telegram for your terminal and your AI agents.
+# ✈️ tgcli — Telegram for your terminal and your AI agents.
 
 Give AI agents (Claude Code, Codex, Cursor, etc.) direct access to your Telegram conversations. Structured JSONL output, minimal command surface, fuzzy name resolution. Works equally well for humans with `--pretty`.
 
