@@ -129,7 +129,7 @@ Read recent messages from a chat. Returns JSONL by default, newest first.
 
 ### `tg update`
 
-Upgrade tgcli to the latest version (via `uv tool install --upgrade`).
+Upgrade tgcli to the latest version. Detects the install method and runs the right command (or tells you what to run for Homebrew installs).
 
 tgcli checks PyPI for new versions once per day and prints a notice to stderr when an update is available. Set `TGCLI_NO_UPDATE_CHECK=1` to disable.
 
