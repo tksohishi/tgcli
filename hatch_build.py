@@ -25,3 +25,4 @@ class CustomBuildHook(BuildHookInterface):
 
         out = Path(self.root) / "src" / "tgcli" / "_commit.py"
         out.write_text(f"COMMIT = {commit!r}\n")
+        build_data["force_include"][str(out)] = "tgcli/_commit.py"
