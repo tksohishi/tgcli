@@ -5,7 +5,7 @@ from io import StringIO
 
 from rich.console import Console
 
-from tg_cli.formatting import (
+from tgcli.formatting import (
     format_auth_status,
     format_context,
     format_message_jsonl,

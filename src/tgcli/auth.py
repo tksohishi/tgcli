@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from telethon.sessions import StringSession
 
-from tg_cli.client import create_client
-from tg_cli.session import delete_session, load_session, save_session
+from tgcli.client import create_client
+from tgcli.session import delete_session, load_session, save_session
 
 
 async def login() -> None:

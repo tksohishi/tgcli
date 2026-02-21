@@ -1,4 +1,4 @@
-# tg-cli — Telegram for your terminal and your AI agents.
+# tgcli — Telegram for your terminal and your AI agents.
 
 Give AI agents (Claude Code, Codex, Cursor, etc.) direct access to your Telegram conversations. Structured JSONL output, minimal command surface, fuzzy name resolution. Works equally well for humans with `--pretty`.
 
@@ -15,14 +15,14 @@ Give AI agents (Claude Code, Codex, Cursor, etc.) direct access to your Telegram
 Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-uv tool install tg-cli
+uv tool install tgcli
 ```
 
 Or install from source:
 
 ```bash
-git clone https://github.com/tksohishi/tg-cli.git
-cd tg-cli
+git clone https://github.com/tksohishi/tgcli.git
+cd tgcli
 uv tool install .
 ```
 
@@ -38,7 +38,7 @@ Create a Telegram API app at [my.telegram.org/apps](https://my.telegram.org/apps
 tg auth
 ```
 
-This walks you through setup: saves your API credentials to `~/.config/tg-cli/config.toml`, then logs in with phone number + verification code.
+This walks you through setup: saves your API credentials to `~/.config/tgcli/config.toml`, then logs in with phone number + verification code.
 
 ### 3. Read Messages
 
@@ -57,7 +57,7 @@ tg context "Finance Team" 12345
 
 ## Use with AI Agents
 
-Once authenticated, any AI coding agent with shell access can use tg-cli directly. A few examples:
+Once authenticated, any AI coding agent with shell access can use tgcli directly. A few examples:
 
 **Ask Claude Code to summarize a group chat:**
 
@@ -77,7 +77,7 @@ The agent runs `tg read "Alice" -q "deployment" --after 2025-02-14` and surfaces
 tg read "Alerts" --limit 100 | jq 'select(.text | test("ERROR"))'
 ```
 
-No wrapper libraries or API adapters needed. The structured output and simple command surface mean agents can use tg-cli out of the box.
+No wrapper libraries or API adapters needed. The structured output and simple command surface mean agents can use tgcli out of the box.
 
 ## Commands
 
@@ -126,7 +126,7 @@ View a message with surrounding context. Returns JSONL by default.
 
 ## Configuration
 
-Config lives at `~/.config/tg-cli/config.toml`:
+Config lives at `~/.config/tgcli/config.toml`:
 
 ```toml
 api_id = 123456

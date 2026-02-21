@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "tg-cli"
+name = "tgcli"
 version = "0.6.0"
 description = "CLI tool to read Telegram messages from the terminal"
 readme = "README.md"
@@ -28,7 +28,7 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/tksohishi/tg-cli"
+Repository = "https://github.com/tksohishi/tgcli"
 
 [dependency-groups]
 dev = [
@@ -39,10 +39,10 @@ dev = [
 ]
 
 [project.scripts]
-tg = "tg_cli.cli:app"
+tg = "tgcli.cli:app"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/tg_cli"]
+packages = ["src/tgcli"]
 
 [tool.ruff]
 target-version = "py312"

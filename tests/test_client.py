@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from tg_cli.client import create_client, get_context, read_messages
+from tgcli.client import create_client, get_context, read_messages
 
 _next_entity_id = 0
 
@@ -46,11 +46,11 @@ def _mock_msg(
 
 
 class TestCreateClient:
-    @patch("tg_cli.client.load_session", return_value="session_str")
-    @patch("tg_cli.client.StringSession")
-    @patch("tg_cli.client.TelegramClient")
+    @patch("tgcli.client.load_session", return_value="session_str")
+    @patch("tgcli.client.StringSession")
+    @patch("tgcli.client.TelegramClient")
     def test_creates_client_with_config(self, mock_tc, mock_ss, mock_load):
-        from tg_cli.config import TelegramConfig
+        from tgcli.config import TelegramConfig
 
         cfg = TelegramConfig(api_id=123, api_hash="abc")
         create_client(cfg)

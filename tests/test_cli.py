@@ -7,23 +7,21 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from telethon.errors import UnauthorizedError
 from typer.testing import CliRunner
 
-from tg_cli.cli import app
-from tg_cli.formatting import MessageData
+from tgcli.cli import app
+from tgcli.formatting import MessageData
 
 runner = CliRunner()
 
 
 class TestAuthLogin:
-    @patch("tg_cli.auth.login", new_callable=AsyncMock)
+    @patch("tgcli.auth.login", new_callable=AsyncMock)
     def test_login_success(self, mock_login):
         result = runner.invoke(app, ["auth", "login"])
 
         assert result.exit_code == 0
         assert "Login successful" in result.output
 
-    @patch(
-        "tg_cli.auth.login", new_callable=AsyncMock, side_effect=RuntimeError("fail")
-    )
+    @patch("tgcli.auth.login", new_callable=AsyncMock, side_effect=RuntimeError("fail"))
     def test_login_failure(self, mock_login):
         result = runner.invoke(app, ["auth", "login"])
 
@@ -31,7 +29,7 @@ class TestAuthLogin:
 
 
 class TestAuthLogout:
-    @patch("tg_cli.auth.logout", new_callable=AsyncMock)
+    @patch("tgcli.auth.logout", new_callable=AsyncMock)
     def test_logout_success(self, mock_logout):
         result = runner.invoke(app, ["auth", "logout"])
 
@@ -40,7 +38,7 @@ class TestAuthLogout:
 
 
 class TestAuthStatus:
-    @patch("tg_cli.auth.get_status", new_callable=AsyncMock)
+    @patch("tgcli.auth.get_status", new_callable=AsyncMock)
     def test_status_authenticated(self, mock_status):
         mock_status.return_value = {
             "authenticated": True,
@@ -52,7 +50,7 @@ class TestAuthStatus:
         assert result.exit_code == 0
         assert "authenticated" in result.output
 
-    @patch("tg_cli.auth.get_status", new_callable=AsyncMock)
+    @patch("tgcli.auth.get_status", new_callable=AsyncMock)
     def test_status_not_authenticated(self, mock_status):
         mock_status.return_value = {
             "authenticated": False,
@@ -65,7 +63,7 @@ class TestAuthStatus:
         assert "not authenticated" in result.output
 
     @patch(
-        "tg_cli.auth.get_status",
+        "tgcli.auth.get_status",
         new_callable=AsyncMock,
         side_effect=SystemExit("credentials not found"),
     )
@@ -79,8 +77,8 @@ class TestAuthStatus:
 class TestAuthSmart:
     """Tests for bare `tg auth` (no subcommand)."""
 
-    @patch("tg_cli.auth.get_status", new_callable=AsyncMock)
-    @patch("tg_cli.config.load_config")
+    @patch("tgcli.auth.get_status", new_callable=AsyncMock)
+    @patch("tgcli.config.load_config")
     def test_auth_already_logged_in_shows_status(self, mock_load, mock_status):
         mock_load.return_value = MagicMock()
         mock_status.return_value = {
@@ -94,9 +92,9 @@ class TestAuthSmart:
         assert "authenticated" in result.output
         assert "tg auth logout" in result.output
 
-    @patch("tg_cli.auth.login", new_callable=AsyncMock)
-    @patch("tg_cli.auth.get_status", new_callable=AsyncMock)
-    @patch("tg_cli.config.load_config")
+    @patch("tgcli.auth.login", new_callable=AsyncMock)
+    @patch("tgcli.auth.get_status", new_callable=AsyncMock)
+    @patch("tgcli.config.load_config")
     def test_auth_not_logged_in_triggers_login(
         self, mock_load, mock_status, mock_login
     ):
@@ -113,11 +111,11 @@ class TestAuthSmart:
         mock_login.assert_awaited_once()
 
     @patch("webbrowser.open")
-    @patch("tg_cli.auth.login", new_callable=AsyncMock)
-    @patch("tg_cli.auth.get_status", new_callable=AsyncMock)
-    @patch("tg_cli.config.write_config")
+    @patch("tgcli.auth.login", new_callable=AsyncMock)
+    @patch("tgcli.auth.get_status", new_callable=AsyncMock)
+    @patch("tgcli.config.write_config")
     @patch(
-        "tg_cli.config.load_config",
+        "tgcli.config.load_config",
         side_effect=[SystemExit("credentials not found"), None],
     )
     def test_auth_no_config_prompts_and_creates(
@@ -135,7 +133,7 @@ class TestAuthSmart:
         assert result.exit_code == 0
         mock_write.assert_called_once_with(123456, "abc123")
 
-    @patch("tg_cli.config.load_config", side_effect=ValueError("invalid literal"))
+    @patch("tgcli.config.load_config", side_effect=ValueError("invalid literal"))
     def test_auth_malformed_config_exits_1(self, mock_load):
         result = runner.invoke(app, ["auth"])
 
@@ -144,8 +142,8 @@ class TestAuthSmart:
 
 
 class TestChats:
-    @patch("tg_cli.client.create_client")
-    @patch("tg_cli.client.list_chats", new_callable=AsyncMock)
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.list_chats", new_callable=AsyncMock)
     def test_chats_unauthorized_exits_2(self, mock_list_chats, mock_create):
         client = AsyncMock()
         mock_create.return_value = client
@@ -158,8 +156,8 @@ class TestChats:
 
 
 class TestRead:
-    @patch("tg_cli.client.create_client")
-    @patch("tg_cli.client.read_messages", new_callable=AsyncMock)
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.read_messages", new_callable=AsyncMock)
     def test_read_jsonl_default(self, mock_read, mock_create):
         client = AsyncMock()
         mock_create.return_value = client
@@ -178,8 +176,8 @@ class TestRead:
         line = json.loads(result.output.strip())
         assert line["text"] == "hello"
 
-    @patch("tg_cli.client.create_client")
-    @patch("tg_cli.client.read_messages", new_callable=AsyncMock)
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.read_messages", new_callable=AsyncMock)
     def test_read_pretty(self, mock_read, mock_create):
         client = AsyncMock()
         mock_create.return_value = client
@@ -197,8 +195,8 @@ class TestRead:
         assert result.exit_code == 0
         assert "hello world" in result.output
 
-    @patch("tg_cli.client.create_client")
-    @patch("tg_cli.client.read_messages", new_callable=AsyncMock)
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.read_messages", new_callable=AsyncMock)
     def test_read_no_results(self, mock_read, mock_create):
         client = AsyncMock()
         mock_create.return_value = client
@@ -209,8 +207,8 @@ class TestRead:
         assert result.exit_code == 0
         assert "No messages found" in result.output
 
-    @patch("tg_cli.client.create_client")
-    @patch("tg_cli.client.read_messages", new_callable=AsyncMock)
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.read_messages", new_callable=AsyncMock)
     def test_read_unauthorized_exits_2(self, mock_read, mock_create):
         client = AsyncMock()
         mock_create.return_value = client
@@ -222,7 +220,7 @@ class TestRead:
         assert "Not authenticated" in result.output
 
     @patch(
-        "tg_cli.client.create_client", side_effect=SystemExit("credentials not found")
+        "tgcli.client.create_client", side_effect=SystemExit("credentials not found")
     )
     def test_read_config_error_exits_1(self, mock_create):
         result = runner.invoke(app, ["read", "Group"])
@@ -230,8 +228,8 @@ class TestRead:
         assert result.exit_code == 1
         assert "Configuration error" in result.output
 
-    @patch("tg_cli.client.create_client")
-    @patch("tg_cli.client.read_messages", new_callable=AsyncMock)
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.read_messages", new_callable=AsyncMock)
     def test_read_head(self, mock_read, mock_create):
         client = AsyncMock()
         mock_create.return_value = client
@@ -257,8 +255,8 @@ class TestRead:
         assert result.exit_code == 1
         assert "Invalid date format" in result.output
 
-    @patch("tg_cli.client.create_client")
-    @patch("tg_cli.client.read_messages", new_callable=AsyncMock)
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.read_messages", new_callable=AsyncMock)
     def test_read_query_flag(self, mock_read, mock_create):
         client = AsyncMock()
         mock_create.return_value = client
@@ -270,8 +268,8 @@ class TestRead:
         call_kwargs = mock_read.call_args[1]
         assert call_kwargs["query"] == "hello"
 
-    @patch("tg_cli.client.create_client")
-    @patch("tg_cli.client.read_messages", new_callable=AsyncMock)
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.read_messages", new_callable=AsyncMock)
     def test_read_q_shorthand(self, mock_read, mock_create):
         client = AsyncMock()
         mock_create.return_value = client
@@ -282,8 +280,8 @@ class TestRead:
         call_kwargs = mock_read.call_args[1]
         assert call_kwargs["query"] == "hello"
 
-    @patch("tg_cli.client.create_client")
-    @patch("tg_cli.client.read_messages", new_callable=AsyncMock)
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.read_messages", new_callable=AsyncMock)
     def test_read_from_flag(self, mock_read, mock_create):
         client = AsyncMock()
         mock_create.return_value = client
@@ -295,8 +293,8 @@ class TestRead:
         call_kwargs = mock_read.call_args[1]
         assert call_kwargs["from_"] == "Alice"
 
-    @patch("tg_cli.client.create_client")
-    @patch("tg_cli.client.read_messages", new_callable=AsyncMock)
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.read_messages", new_callable=AsyncMock)
     def test_read_query_and_from(self, mock_read, mock_create):
         client = AsyncMock()
         mock_create.return_value = client
@@ -310,8 +308,8 @@ class TestRead:
 
 
 class TestContext:
-    @patch("tg_cli.client.create_client")
-    @patch("tg_cli.client.get_context", new_callable=AsyncMock)
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.get_context", new_callable=AsyncMock)
     def test_context_pretty(self, mock_context, mock_create):
         client = AsyncMock()
         mock_create.return_value = client
@@ -333,8 +331,8 @@ class TestContext:
         assert result.exit_code == 0
         assert "target msg" in result.output
 
-    @patch("tg_cli.client.create_client")
-    @patch("tg_cli.client.get_context", new_callable=AsyncMock)
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.get_context", new_callable=AsyncMock)
     def test_context_jsonl_default(self, mock_context, mock_create):
         client = AsyncMock()
         mock_create.return_value = client
@@ -380,8 +378,8 @@ class TestContext:
         assert second.get("target") is True
         assert "replied_to" not in second
 
-    @patch("tg_cli.client.create_client")
-    @patch("tg_cli.client.get_context", new_callable=AsyncMock)
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.get_context", new_callable=AsyncMock)
     def test_context_unauthorized_exits_2(self, mock_context, mock_create):
         client = AsyncMock()
         mock_create.return_value = client
@@ -393,7 +391,7 @@ class TestContext:
         assert "Not authenticated" in result.output
 
     @patch(
-        "tg_cli.client.create_client", side_effect=SystemExit("credentials not found")
+        "tgcli.client.create_client", side_effect=SystemExit("credentials not found")
     )
     def test_context_config_error_exits_1(self, mock_create):
         result = runner.invoke(app, ["context", "Group", "10"])

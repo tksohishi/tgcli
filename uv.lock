@@ -696,7 +696,7 @@ wheels = [
 ]
 
 [[package]]
-name = "tg-cli"
+name = "tgcli"
 version = "0.6.0"
 source = { editable = "." }
 dependencies = [
