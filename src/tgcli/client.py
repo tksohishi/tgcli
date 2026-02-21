@@ -82,16 +82,24 @@ async def search_messages(
     if from_:
         from_user = await _resolve_entity(client, from_)
 
+    # Telethon's from_user only works with a specific entity, not global search.
+    # When searching globally, filter by sender client-side instead.
+    use_from_user = from_user if entity else None
+    filter_sender_id = from_user.id if from_user and not entity else None
+
     results: list[MessageData] = []
     async for msg in client.iter_messages(
         entity,
         search=query,
-        limit=limit,
+        limit=limit if not filter_sender_id else None,
         offset_date=before,
-        from_user=from_user,
+        from_user=use_from_user,
     ):
         if after and msg.date and msg.date < after:
             break
+
+        if filter_sender_id and msg.sender_id != filter_sender_id:
+            continue
 
         chat_entity = await msg.get_chat()
         sender = await msg.get_sender()

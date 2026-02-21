@@ -8,9 +8,13 @@ import pytest
 
 from tgcli.client import create_client, get_context, read_messages, search_messages
 
+_next_entity_id = 0
+
 
 def _mock_entity(name: str, *, is_group: bool = False):
-    e = SimpleNamespace()
+    global _next_entity_id
+    _next_entity_id += 1
+    e = SimpleNamespace(id=_next_entity_id)
     if is_group:
         e.title = name
     else:
@@ -74,27 +78,37 @@ class TestSearchMessages:
 
     async def test_search_from_me(self, client):
         me_entity = _mock_entity("Takeshi")
+        me_entity.id = 100
+        msg = _mock_msg(1, "my message", sender_name="Takeshi")
+        msg.sender_id = 100
         client.get_me = AsyncMock(return_value=me_entity)
-        client.iter_messages = MagicMock(return_value=_async_iter([]))
+        client.iter_messages = MagicMock(return_value=_async_iter([msg]))
 
-        await search_messages(client, "q", from_="me")
+        results = await search_messages(client, "q", from_="me")
 
         client.get_me.assert_called_once()
         call_kwargs = client.iter_messages.call_args
         assert call_kwargs[0][0] is None
-        assert call_kwargs[1]["from_user"] == me_entity
+        assert call_kwargs[1]["from_user"] is None
+        assert len(results) == 1
 
-    async def test_search_from_only(self, client):
+    async def test_search_from_filters_client_side(self, client):
         sender_entity = _mock_entity("Alice")
+        sender_entity.id = 42
+        mine = _mock_msg(1, "my msg", sender_name="Me")
+        mine.sender_id = 99
+        theirs = _mock_msg(2, "their msg", sender_name="Alice")
+        theirs.sender_id = 42
         client.get_entity = AsyncMock(return_value=sender_entity)
-        client.iter_messages = MagicMock(return_value=_async_iter([]))
+        client.iter_messages = MagicMock(return_value=_async_iter([mine, theirs]))
 
-        await search_messages(client, "q", from_="Alice")
+        results = await search_messages(client, "q", from_="Alice")
 
-        client.get_entity.assert_called_with("Alice")
         call_kwargs = client.iter_messages.call_args
         assert call_kwargs[0][0] is None
-        assert call_kwargs[1]["from_user"] == sender_entity
+        assert call_kwargs[1]["from_user"] is None
+        assert len(results) == 1
+        assert results[0].text == "their msg"
 
     async def test_search_with_in(self, client):
         group_entity = _mock_entity("Work", is_group=True)
@@ -122,9 +136,11 @@ class TestSearchMessages:
         assert call_kwargs[1]["from_user"] == sender_entity
 
     async def test_search_without_query(self, client):
-        msgs = [_mock_msg(1, "hello")]
-        client.get_entity = AsyncMock(return_value=_mock_entity("Alice"))
-        client.iter_messages = MagicMock(return_value=_async_iter(msgs))
+        entity = _mock_entity("Alice")
+        msg = _mock_msg(1, "hello")
+        msg.sender_id = entity.id
+        client.get_entity = AsyncMock(return_value=entity)
+        client.iter_messages = MagicMock(return_value=_async_iter([msg]))
 
         results = await search_messages(client, from_="Alice")
 
