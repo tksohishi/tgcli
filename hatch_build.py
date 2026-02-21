@@ -11,18 +11,15 @@ from hatchling.builders.hooks.plugin.interface import BuildHookInterface
 class CustomBuildHook(BuildHookInterface):
     def initialize(self, version: str, build_data: dict) -> None:  # noqa: ARG002
         commit = None
-        pkg_version = self.metadata.version
         try:
-            # If this version is tagged, it's a release; no commit suffix.
-            tag = subprocess.run(
-                ["git", "tag", "-l", f"v{pkg_version}"],  # noqa: S607
+            # Only omit commit hash if HEAD is exactly a tagged release.
+            exact = subprocess.run(
+                ["git", "describe", "--tags", "--exact-match", "HEAD"],  # noqa: S607
                 capture_output=True,
                 text=True,
                 timeout=2,
             )
-            if tag.returncode == 0 and tag.stdout.strip():
-                pass  # tagged release, keep commit = None
-            else:
+            if exact.returncode != 0:
                 result = subprocess.run(
                     ["git", "rev-parse", "--short", "HEAD"],  # noqa: S607
                     capture_output=True,
