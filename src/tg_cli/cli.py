@@ -12,7 +12,7 @@ from telethon.errors import UnauthorizedError
 
 def _version_callback(value: bool) -> None:
     if value:
-        print(version("tgcli"))
+        print(version("tg-cli"))
         raise typer.Exit()
 
 
@@ -49,8 +49,8 @@ def auth_default(ctx: typer.Context) -> None:
     if ctx.invoked_subcommand is not None:
         return
 
-    from tgcli.config import CONFIG_PATH, load_config, write_config
-    from tgcli.formatting import format_auth_status
+    from tg_cli.config import CONFIG_PATH, load_config, write_config
+    from tg_cli.formatting import format_auth_status
 
     # Step 1: ensure config exists
     try:
@@ -74,7 +74,7 @@ def auth_default(ctx: typer.Context) -> None:
         raise typer.Exit(1)
 
     # Step 2: check auth state
-    from tgcli.auth import get_status
+    from tg_cli.auth import get_status
 
     try:
         info = asyncio.run(get_status())
@@ -93,7 +93,7 @@ def auth_default(ctx: typer.Context) -> None:
 
 def _run_login() -> None:
     """Shared login flow for both `tg auth` and `tg auth login`."""
-    from tgcli.auth import login as _login
+    from tg_cli.auth import login as _login
 
     stderr.print(
         "\nLogging in to Telegram. You'll be asked for your phone number\n"
@@ -101,7 +101,7 @@ def _run_login() -> None:
         "spaces/dashes are optional, but the country code is required.\n"
         "Telegram will send a verification code to your account, like\n"
         "logging in on a new device. Your phone number is sent to\n"
-        "Telegram's API only; tgcli does not store or transmit it.\n"
+        "Telegram's API only; tg-cli does not store or transmit it.\n"
     )
     try:
         asyncio.run(_login())
@@ -127,7 +127,7 @@ def login() -> None:
 @auth_app.command()
 def logout() -> None:
     """Remove session from Keychain."""
-    from tgcli.auth import logout as _logout
+    from tg_cli.auth import logout as _logout
 
     try:
         asyncio.run(_logout())
@@ -140,8 +140,8 @@ def logout() -> None:
 @auth_app.command()
 def status() -> None:
     """Show current auth state."""
-    from tgcli.auth import get_status
-    from tgcli.formatting import format_auth_status
+    from tg_cli.auth import get_status
+    from tg_cli.formatting import format_auth_status
 
     try:
         info = asyncio.run(get_status())
@@ -171,7 +171,7 @@ def chats(
     ] = False,
 ) -> None:
     """List your Telegram chats."""
-    from tgcli.client import create_client, list_chats
+    from tg_cli.client import create_client, list_chats
 
     async def _run():
         client = create_client()
@@ -196,11 +196,11 @@ def chats(
         return
 
     if pretty:
-        from tgcli.formatting import format_chats_table
+        from tg_cli.formatting import format_chats_table
 
         stdout.print(format_chats_table(results))
     else:
-        from tgcli.formatting import format_chat_line
+        from tg_cli.formatting import format_chat_line
 
         for chat in results:
             print(format_chat_line(chat))
@@ -230,7 +230,7 @@ def read(
     ] = False,
 ) -> None:
     """Read recent messages from a chat. Newest first by default (--head for oldest)."""
-    from tgcli.client import create_client, read_messages
+    from tg_cli.client import create_client, read_messages
 
     try:
         after_dt = _parse_date(after) if after else None
@@ -272,11 +272,11 @@ def read(
         return
 
     if pretty:
-        from tgcli.formatting import format_search_results
+        from tg_cli.formatting import format_search_results
 
         stdout.print(format_search_results(results))
     else:
-        from tgcli.formatting import format_message_jsonl
+        from tg_cli.formatting import format_message_jsonl
 
         for msg in results:
             print(format_message_jsonl(msg))
@@ -294,7 +294,7 @@ def context(
     ] = False,
 ) -> None:
     """View a message with surrounding context."""
-    from tgcli.client import create_client, get_context
+    from tg_cli.client import create_client, get_context
 
     async def _run():
         client = create_client()
@@ -319,11 +319,11 @@ def context(
         return
 
     if pretty:
-        from tgcli.formatting import format_context
+        from tg_cli.formatting import format_context
 
         stdout.print(format_context(messages, target_id, replied_to=replied_to))
     else:
-        from tgcli.formatting import format_message_jsonl
+        from tg_cli.formatting import format_message_jsonl
 
         replied_to_id = replied_to.id if replied_to else None
         for msg in messages:

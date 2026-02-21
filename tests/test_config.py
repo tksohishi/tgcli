@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from tgcli.config import TelegramConfig, load_config, write_config
+from tg_cli.config import TelegramConfig, load_config, write_config
 
 
 def test_load_from_toml(tmp_path):

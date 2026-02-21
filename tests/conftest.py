@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from tgcli.formatting import MessageData
+from tg_cli.formatting import MessageData
 
 
 def _make_message(

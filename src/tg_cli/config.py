@@ -5,7 +5,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-CONFIG_PATH = Path.home() / ".config" / "tgcli" / "config.toml"
+CONFIG_PATH = Path.home() / ".config" / "tg-cli" / "config.toml"
 
 
 @dataclass(frozen=True)

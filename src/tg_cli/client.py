@@ -5,9 +5,9 @@ from datetime import datetime
 from telethon import TelegramClient
 from telethon.sessions import StringSession
 
-from tgcli.config import TelegramConfig, load_config
-from tgcli.formatting import ChatData, MessageData
-from tgcli.session import load_session
+from tg_cli.config import TelegramConfig, load_config
+from tg_cli.formatting import ChatData, MessageData
+from tg_cli.session import load_session
 
 
 def create_client(config: TelegramConfig | None = None) -> TelegramClient:

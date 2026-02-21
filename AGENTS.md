@@ -3,7 +3,7 @@
 ## Architecture
 
 ```
-src/tgcli/
+src/tg_cli/
   cli.py          # Typer app, thin entrypoints
   auth.py         # Login/logout/status logic
   client.py       # Telethon wrapper (search, read, context)

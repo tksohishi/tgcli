@@ -3,13 +3,13 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from tgcli.auth import get_status, login, logout
+from tg_cli.auth import get_status, login, logout
 
 
 class TestLogin:
-    @patch("tgcli.auth.save_session")
-    @patch("tgcli.auth.StringSession")
-    @patch("tgcli.auth.create_client")
+    @patch("tg_cli.auth.save_session")
+    @patch("tg_cli.auth.StringSession")
+    @patch("tg_cli.auth.create_client")
     async def test_login_saves_session(self, mock_create, mock_ss, mock_save):
         client = AsyncMock()
         mock_create.return_value = client
@@ -23,8 +23,8 @@ class TestLogin:
 
 
 class TestLogout:
-    @patch("tgcli.auth.delete_session")
-    @patch("tgcli.auth.create_client")
+    @patch("tg_cli.auth.delete_session")
+    @patch("tg_cli.auth.create_client")
     async def test_logout_authorized(self, mock_create, mock_delete):
         client = AsyncMock()
         client.is_user_authorized = AsyncMock(return_value=True)
@@ -35,8 +35,8 @@ class TestLogout:
         client.log_out.assert_awaited_once()
         mock_delete.assert_called_once()
 
-    @patch("tgcli.auth.delete_session")
-    @patch("tgcli.auth.create_client")
+    @patch("tg_cli.auth.delete_session")
+    @patch("tg_cli.auth.create_client")
     async def test_logout_not_authorized(self, mock_create, mock_delete):
         client = AsyncMock()
         client.is_user_authorized = AsyncMock(return_value=False)
@@ -47,8 +47,8 @@ class TestLogout:
         client.log_out.assert_not_awaited()
         mock_delete.assert_called_once()
 
-    @patch("tgcli.auth.delete_session")
-    @patch("tgcli.auth.create_client")
+    @patch("tg_cli.auth.delete_session")
+    @patch("tg_cli.auth.create_client")
     async def test_logout_deletes_session_when_client_fails(
         self, mock_create, mock_delete
     ):
@@ -61,8 +61,8 @@ class TestLogout:
 
 
 class TestGetStatus:
-    @patch("tgcli.auth.create_client")
-    @patch("tgcli.auth.load_session", return_value=None)
+    @patch("tg_cli.auth.create_client")
+    @patch("tg_cli.auth.load_session", return_value=None)
     async def test_no_session(self, mock_load, mock_create):
         result = await get_status()
 
@@ -73,8 +73,8 @@ class TestGetStatus:
         }
         mock_create.assert_not_called()
 
-    @patch("tgcli.auth.create_client")
-    @patch("tgcli.auth.load_session", return_value="some_session")
+    @patch("tg_cli.auth.create_client")
+    @patch("tg_cli.auth.load_session", return_value="some_session")
     async def test_authenticated_with_phone(self, mock_load, mock_create):
         client = AsyncMock()
         client.is_user_authorized = AsyncMock(return_value=True)
@@ -87,8 +87,8 @@ class TestGetStatus:
         assert result["session_exists"] is True
         assert result["phone"] == "123******01"
 
-    @patch("tgcli.auth.create_client")
-    @patch("tgcli.auth.load_session", return_value="some_session")
+    @patch("tg_cli.auth.create_client")
+    @patch("tg_cli.auth.load_session", return_value="some_session")
     async def test_session_exists_but_not_authorized(self, mock_load, mock_create):
         client = AsyncMock()
         client.is_user_authorized = AsyncMock(return_value=False)

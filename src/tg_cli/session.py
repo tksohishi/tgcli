@@ -3,7 +3,7 @@ from __future__ import annotations
 import keyring
 from keyring.errors import PasswordDeleteError
 
-SERVICE_NAME = "tgcli"
+SERVICE_NAME = "tg-cli"
 SESSION_KEY = "telegram_session"
 
 
