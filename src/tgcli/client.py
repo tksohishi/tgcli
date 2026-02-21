@@ -92,9 +92,7 @@ async def list_chats(
     """
     filter_lower = filter_name.lower() if filter_name else None
     results: list[ChatData] = []
-    count = 0
-    async for dialog in client.iter_dialogs():
-        count += 1
+    async for dialog in client.iter_dialogs(limit=limit):
         if not filter_lower or filter_lower in dialog.name.lower():
             results.append(
                 ChatData(
@@ -105,8 +103,6 @@ async def list_chats(
                     date=dialog.date,
                 )
             )
-        if count >= limit:
-            break
     return results
 
 
