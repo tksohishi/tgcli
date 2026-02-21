@@ -1,15 +1,15 @@
-# tgcli — Telegram in your terminal.
+# tgcli — Telegram for your terminal and your AI agents.
 
-Read your Telegram messages from the command line. JSONL output by default for scripting; `--pretty` for human-readable tables.
+Give AI agents (Claude Code, Codex, Cursor, etc.) direct access to your Telegram conversations. Three commands, structured JSONL output, fuzzy name resolution. Works equally well for humans with `--pretty`.
 
 ## Features
 
-- **Read** - read recent messages from any chat, with text and sender filtering
-- **Context** - view any message with surrounding conversation
-- **Fuzzy resolution** - chat and user names resolve via display name matching (no need for exact IDs)
-- **JSONL output** - one JSON object per line, pipe-friendly; `--pretty` for Rich tables
-- **1Password integration** - API credentials can be `op://` references resolved at runtime
-- **Secure session storage** - Telethon session key stored in macOS Keychain via `keyring`
+- **JSONL by default** — one JSON object per line; agents parse it natively, scripts pipe it freely
+- **3-command surface** — `auth`, `read`, `context`; easy for agents to discover and invoke
+- **Fuzzy resolution** — chat and user names match by display name (no numeric IDs required)
+- **`--pretty` for humans** — Rich tables when you want to read output yourself
+- **Secure session storage** — Telethon session key stored in macOS Keychain via `keyring`
+- **1Password integration** — API credentials can be `op://` references resolved at runtime
 
 ## Installation
 
@@ -55,6 +55,30 @@ tg read "Finance Team" -q "deadline" --from "Alice" --after 2025-01-01
 ```bash
 tg context "Finance Team" 12345
 ```
+
+## Use with AI Agents
+
+Once authenticated, any AI coding agent with shell access can use tgcli directly. A few examples:
+
+**Ask Claude Code to summarize a group chat:**
+
+> "Read the last 30 messages from 'Engineering' and summarize the key decisions."
+
+The agent runs `tg read "Engineering" --limit 30`, parses the JSONL, and responds.
+
+**Find a past conversation:**
+
+> "What did I discuss with Alice last week about the deployment?"
+
+The agent runs `tg read "Alice" -q "deployment" --after 2025-02-14` and surfaces the relevant messages.
+
+**Pipe into scripts:**
+
+```bash
+tg read "Alerts" --limit 100 | jq 'select(.text | test("ERROR"))'
+```
+
+No wrapper libraries or API adapters needed. The structured output and simple command surface mean agents can use tgcli out of the box.
 
 ## Commands
 
