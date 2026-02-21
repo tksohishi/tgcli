@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tgcli"
-version = "0.4.1"
+version = "0.4.2"
 description = "CLI tool to read Telegram messages from the terminal"
 readme = "README.md"
 license = "MIT"
