@@ -92,6 +92,16 @@ Explicit subcommands:
 - `tg auth logout` - remove session from Keychain
 - `tg auth status` - show auth state
 
+### `tg chats`
+
+List your Telegram chats. Returns JSONL by default.
+
+| Flag       | Description                  |
+|------------|------------------------------|
+| `--filter` | Fuzzy filter by chat name    |
+| `--limit`  | Max chats to list (default 100) |
+| `--pretty` | Rich table output instead of JSONL |
+
 ### `tg read <chat>`
 
 Read recent messages from a chat. Returns JSONL by default, newest first.
