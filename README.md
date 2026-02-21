@@ -12,13 +12,27 @@ Give AI agents (Claude Code, Codex, Cursor, etc.) direct access to your Telegram
 
 ## Installation
 
-Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
+Requires Python 3.12+.
+
+**One-liner** (installs [uv](https://docs.astral.sh/uv/) if needed):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tksohishi/tgcli/main/install.sh | bash
+```
+
+**Homebrew:**
+
+```bash
+brew install tksohishi/tap/tgcli
+```
+
+**With uv:**
 
 ```bash
 uv tool install pytgcli
 ```
 
-Or install from source:
+**From source:**
 
 ```bash
 git clone https://github.com/tksohishi/tgcli.git
@@ -114,6 +128,12 @@ Read recent messages from a chat. Returns JSONL by default, newest first.
 | `--after`      | Only messages after date (YYYY-MM-DD)  |
 | `--before`     | Only messages before date (YYYY-MM-DD) |
 | `--pretty`     | Rich table output instead of JSONL     |
+
+### `tg update`
+
+Upgrade tgcli to the latest version (via `uv tool install --upgrade`).
+
+tgcli checks PyPI for new versions once per day and prints a notice to stderr when an update is available. Set `TGCLI_NO_UPDATE_CHECK=1` to disable.
 
 ### `tg context <chat> <message_id>`
 

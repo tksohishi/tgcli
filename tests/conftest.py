@@ -7,6 +7,12 @@ import pytest
 from tgcli.formatting import MessageData
 
 
+@pytest.fixture(autouse=True)
+def _suppress_update_check(monkeypatch):
+    """Prevent real PyPI calls during tests."""
+    monkeypatch.setenv("TGCLI_NO_UPDATE_CHECK", "1")
+
+
 def _make_message(
     *,
     id: int = 1,

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import subprocess
 from datetime import UTC, datetime
 from importlib.metadata import version
 from typing import Annotated
@@ -38,9 +40,47 @@ def main(
     ] = None,
 ) -> None:
     """Read Telegram messages from the terminal."""
+    if not os.environ.get("TGCLI_NO_UPDATE_CHECK"):
+        from tgcli.update import check_for_update, format_update_notice
+
+        latest = check_for_update()
+        if latest:
+            Console(stderr=True).print(f"[dim]{format_update_notice(latest)}[/dim]")
 
 
 stderr = Console(stderr=True)
+
+
+@app.command()
+def update() -> None:
+    """Upgrade tgcli to the latest version."""
+    from tgcli.update import detect_install_method
+
+    method = detect_install_method()
+    if method == "homebrew":
+        stderr.print("Installed via Homebrew. Run:")
+        stderr.print("  brew upgrade tgcli")
+        return
+    if method == "unknown":
+        stderr.print("Could not detect install method. Upgrade manually:")
+        stderr.print("  uv tool install --upgrade pytgcli")
+        stderr.print("  # or: brew upgrade tgcli")
+        return
+
+    stderr.print("Upgrading tgcli...")
+    result = subprocess.run(  # noqa: S603
+        ["uv", "tool", "install", "--upgrade", "pytgcli"],  # noqa: S607
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        from tgcli.update import clear_update_state
+
+        clear_update_state()
+        stderr.print("[green]tgcli upgraded successfully.[/green]")
+    else:
+        stderr.print(f"[red]Upgrade failed:[/red] {result.stderr.strip()}")
+        raise typer.Exit(1)
 
 
 @auth_app.callback(invoke_without_command=True)
