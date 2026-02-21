@@ -47,7 +47,7 @@ This walks you through setup: saves your API credentials to `~/.config/tgcli/con
 ```bash
 tg search "meeting notes"
 tg search "budget" --in "Finance Team"
-tg search --from "Alice"
+tg search --from me                     # your messages across all chats
 tg search "deadline" --in "Finance Team" --from "Alice" --after 2025-01-01
 ```
 
@@ -78,7 +78,7 @@ Explicit subcommands:
 
 ### `tg search [query]`
 
-Search messages across chats. Returns JSONL by default. Query is optional when `--from` is provided.
+Search messages across chats. Returns JSONL by default. Query is optional when `--in` or `--from` is provided.
 
 | Flag       | Description                            |
 |------------|----------------------------------------|

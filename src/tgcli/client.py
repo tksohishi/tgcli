@@ -76,10 +76,8 @@ async def search_messages(
     from_user = None
     if in_:
         entity = await _resolve_entity(client, in_)
-        if from_:
-            from_user = await _resolve_entity(client, from_)
-    elif from_:
-        entity = await _resolve_entity(client, from_)
+    if from_:
+        from_user = await _resolve_entity(client, from_)
 
     results: list[MessageData] = []
     async for msg in client.iter_messages(

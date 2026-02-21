@@ -193,7 +193,7 @@ def search(
 
     if not in_ and not from_:
         stderr.print(
-            "[dim]Tip: without --in or --from, search only returns your own messages."
+            "[dim]Tip: global search may not include recent messages."
             " Use --in to search within a specific chat"
             " and/or --from to filter by sender.[/dim]"
         )

@@ -73,16 +73,16 @@ class TestSearchMessages:
         assert results[1].text == "also here"
 
     async def test_search_from_only(self, client):
-        chat_entity = _mock_entity("Alice")
-        client.get_entity = AsyncMock(return_value=chat_entity)
+        sender_entity = _mock_entity("Alice")
+        client.get_entity = AsyncMock(return_value=sender_entity)
         client.iter_messages = MagicMock(return_value=_async_iter([]))
 
         await search_messages(client, "q", from_="Alice")
 
         client.get_entity.assert_called_with("Alice")
         call_kwargs = client.iter_messages.call_args
-        assert call_kwargs[0][0] == chat_entity
-        assert call_kwargs[1].get("from_user") is None
+        assert call_kwargs[0][0] is None
+        assert call_kwargs[1]["from_user"] == sender_entity
 
     async def test_search_with_in(self, client):
         group_entity = _mock_entity("Work", is_group=True)

@@ -305,7 +305,7 @@ class TestSearch:
 
         result = runner.invoke(app, ["search", "hello"])
 
-        assert "search only returns your own messages" in result.output
+        assert "global search may not include recent messages" in result.output
 
     @patch("tgcli.client.create_client")
     @patch("tgcli.client.search_messages", new_callable=AsyncMock)
