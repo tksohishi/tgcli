@@ -82,16 +82,21 @@ async def search_messages(
     if from_:
         from_user = await _resolve_entity(client, from_)
 
-    # Telethon's from_user only works with a specific entity, not global search.
-    # When searching globally, filter by sender client-side instead.
+    # Telegram's API is unreliable when combining search + from_user.
+    # Strategy: pass from_user server-side to narrow results, filter text
+    # client-side. For global search (no entity), from_user doesn't work
+    # at all, so both filters are client-side.
     use_from_user = from_user if entity else None
+    use_search = query if not (entity and from_user) else ""
     filter_sender_id = from_user.id if from_user and not entity else None
+    filter_query = query.lower() if entity and from_user and query else None
+    needs_client_filter = filter_sender_id is not None or filter_query is not None
 
     results: list[MessageData] = []
     async for msg in client.iter_messages(
         entity,
-        search=query,
-        limit=limit if not filter_sender_id else None,
+        search=use_search,
+        limit=limit if not needs_client_filter else None,
         offset_date=before,
         from_user=use_from_user,
     ):
@@ -99,6 +104,9 @@ async def search_messages(
             break
 
         if filter_sender_id and msg.sender_id != filter_sender_id:
+            continue
+
+        if filter_query and filter_query not in (msg.text or "").lower():
             continue
 
         chat_entity = await msg.get_chat()
