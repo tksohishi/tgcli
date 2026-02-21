@@ -199,15 +199,28 @@ def search(
     """Search messages across chats."""
     from tgcli.client import create_client, search_messages
 
-    if not in_ and not from_:
+    global_search = not in_
+    if global_search and not from_:
         stderr.print(
             "[dim]Tip: global search may not include recent messages."
             " Use --in to search within a specific chat"
             " and/or --from to filter by sender.[/dim]"
         )
+    elif global_search and from_:
+        stderr.print(
+            "[dim]Tip: --from in global search filters client-side"
+            " (Telegram API limitation). This may be slow.[/dim]"
+        )
 
     try:
-        after_dt = _parse_date(after) if after else None
+        if after:
+            after_dt = _parse_date(after)
+        elif global_search:
+            after_dt = datetime.now(UTC).replace(
+                year=datetime.now(UTC).year - 1, hour=0, minute=0, second=0
+            )
+        else:
+            after_dt = None
         before_dt = _parse_date(before) if before else None
     except ValueError as e:
         stderr.print(f"[red]Invalid date format:[/red] {e}")
