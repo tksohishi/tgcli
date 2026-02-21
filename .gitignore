@@ -13,3 +13,4 @@ htmlcov/
 .DS_Store
 tmp/
 .claude/
+src/tgcli/_commit.py

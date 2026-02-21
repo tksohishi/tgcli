@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import subprocess
 from datetime import UTC, datetime
 from importlib.metadata import version
-from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -16,17 +14,11 @@ def _version_callback(value: bool) -> None:
     if value:
         ver = version("tgcli")
         try:
-            repo_dir = Path(__file__).resolve().parent.parent.parent
-            result = subprocess.run(
-                ["git", "rev-parse", "--short", "HEAD"],  # noqa: S607
-                cwd=repo_dir,
-                capture_output=True,
-                text=True,
-                timeout=2,
-            )
-            if result.returncode == 0:
-                ver = f"{ver}-{result.stdout.strip()}"
-        except Exception:  # noqa: S110
+            from tgcli._commit import COMMIT
+
+            if COMMIT:
+                ver = f"{ver}-{COMMIT}"
+        except ImportError:
             pass
         print(ver)
         raise typer.Exit()
