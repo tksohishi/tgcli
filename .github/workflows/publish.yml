@@ -78,3 +78,85 @@ jobs:
           path: dist
       - uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
       - run: uv publish --trusted-publishing always dist/*
+
+  update-homebrew-tap:
+    needs:
+      - github-release
+      - publish-pypi
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      TAP_REPO: tksohishi/homebrew-tap
+      TAP_TOKEN: ${{ secrets.TAP_GH_TOKEN }}
+    steps:
+      - name: Validate tap token
+        run: |
+          if [ -z "${TAP_TOKEN}" ]; then
+            echo "TAP_GH_TOKEN is required to update homebrew-tap."
+            exit 1
+          fi
+
+      - name: Resolve PyPI source artifact
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          export TAG_VERSION="${VERSION#v}"
+          python3 <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          version = os.environ["TAG_VERSION"]
+          url = f"https://pypi.org/pypi/pytgcli/{version}/json"
+          with urllib.request.urlopen(url) as response:
+            data = json.load(response)
+
+          sdist = next(item for item in data["urls"] if item["packagetype"] == "sdist")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
+            env_file.write(f"TGCLI_VERSION={version}\n")
+            env_file.write(f"TGCLI_SDIST_URL={sdist['url']}\n")
+            env_file.write(f"TGCLI_SDIST_SHA256={sdist['digests']['sha256']}\n")
+          PY
+
+      - name: Update formula in tap repo
+        run: |
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/${TAP_REPO}.git" tap-repo
+          python3 <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          formula_path = Path("tap-repo/Formula/tgcli.rb")
+          content = formula_path.read_text(encoding="utf-8")
+          content, url_replacements = re.subn(
+            r'^  url ".*"$',
+            f'  url "{os.environ["TGCLI_SDIST_URL"]}"',
+            content,
+            count=1,
+            flags=re.MULTILINE,
+          )
+          content, sha_replacements = re.subn(
+            r'^  sha256 ".*"$',
+            f'  sha256 "{os.environ["TGCLI_SDIST_SHA256"]}"',
+            content,
+            count=1,
+            flags=re.MULTILINE,
+          )
+          if url_replacements != 1 or sha_replacements != 1:
+            raise RuntimeError("Failed to patch tgcli.rb top-level url/sha256")
+          formula_path.write_text(content, encoding="utf-8")
+          PY
+
+      - name: Commit and push formula update
+        run: |
+          cd tap-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/tgcli.rb
+          if git diff --cached --quiet; then
+            echo "No formula changes to push."
+            exit 0
+          fi
+          git commit -m "chore: update tgcli formula to v${TGCLI_VERSION}"
+          git push origin main
