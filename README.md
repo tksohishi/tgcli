@@ -8,7 +8,7 @@ Give AI agents (Claude Code, Codex, Cursor, etc.) direct access to your Telegram
 - **Minimal surface** — a handful of commands; easy for agents to discover and invoke
 - **Fuzzy resolution** — chat and user names match by display name (no numeric IDs required)
 - **`--pretty` for humans** — Rich tables when you want to read output yourself
-- **Secure session storage** — Telethon session key stored in system keychain via `keyring`
+- **Agent-friendly session storage** — Telethon session key stored in a local `0600` file by default; keychain remains available as a legacy option
 
 ## Installation
 
@@ -50,7 +50,7 @@ Create a Telegram API app at [my.telegram.org/apps](https://my.telegram.org/apps
 tg auth
 ```
 
-This walks you through setup: saves your API credentials to `~/.config/tgcli/config.toml`, then logs in with phone number + verification code.
+This walks you through setup: saves your API credentials to `~/.config/tgcli/config.toml`, then logs in with phone number + verification code. The Telegram session is stored at `~/.config/tgcli/session` by default.
 
 ### 3. Read Messages
 
@@ -100,7 +100,8 @@ Smart entrypoint: creates config if missing, logs in if needed, shows status if 
 Explicit subcommands:
 
 - `tg auth login` - interactive login (phone + code/2FA)
-- `tg auth logout` - remove session from system keychain
+- `tg auth logout` - remove the local session
+- `tg auth migrate-session` - copy a legacy keychain session to the local session file
 - `tg auth status` - show auth state
 
 ### `tg chats`
@@ -149,9 +150,20 @@ Config lives at `~/.config/tgcli/config.toml`:
 ```toml
 api_id = 123456
 api_hash = "your_api_hash"
+session_store = "file"
 ```
 
-Alternatively, set `TELEGRAM_API_ID` and `TELEGRAM_API_HASH` environment variables.
+`session_store` can be `file` or `keychain`. `file` is the default and stores the Telegram session at `~/.config/tgcli/session` with mode `0600`. `keychain` keeps the legacy system keychain behavior; it may trigger OS password prompts and will be removed in a future major release.
+
+To migrate an existing keychain session to the file backend:
+
+```bash
+tg auth migrate-session
+```
+
+Add `--delete-keychain` to remove the keychain entry after a successful migration.
+
+Alternatively, set `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, and optionally `TGCLI_SESSION_STORE` environment variables.
 
 ## Contributing
 

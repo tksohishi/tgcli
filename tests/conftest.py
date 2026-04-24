@@ -19,6 +19,8 @@ def _make_message(
     text: str = "hello",
     chat_name: str = "Test Chat",
     sender_name: str = "Alice",
+    sender_username: str | None = None,
+    sender_id: int | None = None,
     date: datetime | None = None,
     reply_to_msg_id: int | None = None,
 ) -> MessageData:
@@ -27,6 +29,8 @@ def _make_message(
         text=text,
         chat_name=chat_name,
         sender_name=sender_name,
+        sender_username=sender_username,
+        sender_id=sender_id,
         date=date or datetime(2025, 6, 15, 12, 0, 0, tzinfo=UTC),
         reply_to_msg_id=reply_to_msg_id,
     )

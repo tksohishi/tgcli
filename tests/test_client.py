@@ -11,15 +11,24 @@ from tgcli.client import create_client, get_context, read_messages
 _next_entity_id = 0
 
 
-def _mock_entity(name: str, *, is_group: bool = False):
+def _mock_entity(
+    name: str,
+    *,
+    is_group: bool = False,
+    username: str | None = None,
+    id: int | None = None,
+):
     global _next_entity_id
-    _next_entity_id += 1
-    e = SimpleNamespace(id=_next_entity_id)
+    if id is None:
+        _next_entity_id += 1
+        id = _next_entity_id
+    e = SimpleNamespace(id=id)
     if is_group:
         e.title = name
     else:
         e.first_name = name
         e.last_name = None
+        e.username = username
     return e
 
 
@@ -29,6 +38,8 @@ def _mock_msg(
     *,
     chat_name: str = "Test Chat",
     sender_name: str = "Alice",
+    sender_username: str | None = None,
+    sender_id: int | None = None,
     is_group: bool = True,
     date: datetime | None = None,
     reply_to_msg_id: int | None = None,
@@ -41,7 +52,9 @@ def _mock_msg(
         SimpleNamespace(reply_to_msg_id=reply_to_msg_id) if reply_to_msg_id else None
     )
     msg.get_chat = AsyncMock(return_value=_mock_entity(chat_name, is_group=is_group))
-    msg.get_sender = AsyncMock(return_value=_mock_entity(sender_name))
+    sender = _mock_entity(sender_name, username=sender_username, id=sender_id)
+    msg.sender_id = sender.id
+    msg.get_sender = AsyncMock(return_value=sender)
     return msg
 
 
@@ -55,6 +68,7 @@ class TestCreateClient:
         cfg = TelegramConfig(api_id=123, api_hash="abc")
         create_client(cfg)
 
+        mock_load.assert_called_once_with(store="file")
         mock_ss.assert_called_once_with("session_str")
         mock_tc.assert_called_once_with(mock_ss.return_value, 123, "abc")
 
@@ -65,10 +79,15 @@ class TestReadMessages:
         c = AsyncMock()
         group_dialog = _mock_dialog("Group")
         c.iter_dialogs = MagicMock(side_effect=lambda: _async_iter([group_dialog]))
+        c.get_entity = AsyncMock(side_effect=ValueError("not found"))
+        c.iter_participants = MagicMock(return_value=_async_iter([]))
         return c
 
     async def test_basic_read(self, client):
-        msgs = [_mock_msg(1, "hello"), _mock_msg(2, "world")]
+        msgs = [
+            _mock_msg(1, "hello", sender_username="alice", sender_id=1001),
+            _mock_msg(2, "world"),
+        ]
         client.iter_messages = MagicMock(return_value=_async_iter(msgs))
 
         results = await read_messages(client, "Group")
@@ -76,7 +95,11 @@ class TestReadMessages:
         assert len(results) == 2
         assert results[0].text == "hello"
         assert results[0].chat_name == "Group"
+        assert results[0].sender_name == "Alice"
+        assert results[0].sender_username == "alice"
+        assert results[0].sender_id == 1001
         assert results[1].text == "world"
+        assert results[1].sender_username is None
 
     async def test_read_respects_limit(self, client):
         msgs = [_mock_msg(i, f"msg{i}") for i in range(5)]
@@ -169,13 +192,8 @@ class TestReadMessages:
         assert len(results) == 1
 
     async def test_read_query_and_from_combined(self, client):
-        alice_dialog = _mock_dialog("Alice")
-        client.iter_dialogs = MagicMock(
-            side_effect=[
-                _async_iter([_mock_dialog("Group")]),
-                _async_iter([alice_dialog]),
-            ]
-        )
+        alice = _mock_entity("Alice", username="alice_user", id=100)
+        client.iter_participants = MagicMock(return_value=_async_iter([alice]))
         match = _mock_msg(1, "hello world")
         miss = _mock_msg(2, "goodbye")
         client.iter_messages = MagicMock(return_value=_async_iter([match, miss]))
@@ -185,8 +203,41 @@ class TestReadMessages:
         assert len(results) == 1
         assert results[0].text == "hello world"
         call_kwargs = client.iter_messages.call_args[1]
-        assert call_kwargs["from_user"] == alice_dialog.entity
+        assert call_kwargs["from_user"] == alice
         assert call_kwargs["limit"] is None
+
+    async def test_read_from_bare_username_resolves_entity(self, client):
+        user = _mock_entity("Takeshi", username="takeshi55555", id=55555)
+        client.get_entity = AsyncMock(return_value=user)
+        client.iter_messages = MagicMock(return_value=_async_iter([]))
+
+        await read_messages(client, "Group", from_="takeshi55555")
+
+        client.get_entity.assert_awaited_once_with("takeshi55555")
+        call_kwargs = client.iter_messages.call_args[1]
+        assert call_kwargs["from_user"] == user
+
+    async def test_read_from_display_name_searches_chat_participants(self, client):
+        user = _mock_entity("Takeshi", username="takeshi55555", id=55555)
+        client.iter_participants = MagicMock(return_value=_async_iter([user]))
+        client.iter_messages = MagicMock(return_value=_async_iter([]))
+
+        await read_messages(client, "Group", from_="Takeshi")
+
+        client.iter_participants.assert_called_once()
+        call_kwargs = client.iter_messages.call_args[1]
+        assert call_kwargs["from_user"] == user
+
+    async def test_read_from_ambiguous_display_name_raises(self, client):
+        users = [
+            _mock_entity("Takeshi", username="takeshi1", id=1),
+            _mock_entity("Takeshi", username="takeshi2", id=2),
+        ]
+        client.iter_participants = MagicMock(return_value=_async_iter(users))
+        client.iter_messages = MagicMock(return_value=_async_iter([]))
+
+        with pytest.raises(ValueError, match="multiple senders"):
+            await read_messages(client, "Group", from_="Takeshi")
 
     async def test_read_no_query_no_from_passes_limit(self, client):
         msgs = [_mock_msg(1, "hello")]
@@ -204,6 +255,8 @@ class TestGetContext:
         c = AsyncMock()
         group_dialog = _mock_dialog("Group")
         c.iter_dialogs = MagicMock(side_effect=lambda: _async_iter([group_dialog]))
+        c.get_entity = AsyncMock(side_effect=ValueError("not found"))
+        c.iter_participants = MagicMock(return_value=_async_iter([]))
         return c
 
     async def test_returns_messages_around_target(self, client):

@@ -24,6 +24,8 @@ class MessageData:
     chat_name: str
     sender_name: str
     date: datetime
+    sender_username: str | None = None
+    sender_id: int | None = None
     reply_to_msg_id: int | None = None
 
 
@@ -127,6 +129,7 @@ def format_auth_status(
     authenticated: bool,
     phone: str | None = None,
     session_exists: bool = False,
+    session_store: str = "file",
 ) -> Text:
     """Build a Rich Text for auth status display."""
     output = Text()
@@ -144,8 +147,11 @@ def format_auth_status(
 
     output.append("Session: ", style="bold")
     if session_exists:
-        output.append("stored in system keychain\n", style="green")
+        if session_store == "keychain":
+            output.append("stored in keychain\n", style="green")
+        else:
+            output.append("stored locally\n", style="green")
     else:
-        output.append("none\n", style="red")
+        output.append(f"none ({session_store})\n", style="red")
 
     return output

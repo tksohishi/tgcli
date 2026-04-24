@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 
 from telethon import TelegramClient
@@ -9,11 +10,13 @@ from tgcli.config import TelegramConfig, load_config
 from tgcli.formatting import ChatData, MessageData
 from tgcli.session import load_session
 
+_USERNAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{4,31}$")
+
 
 def create_client(config: TelegramConfig | None = None) -> TelegramClient:
     """Create a TelegramClient using stored session and config."""
     config = config or load_config()
-    session_str = load_session() or ""
+    session_str = load_session(store=config.session_store) or ""
     return TelegramClient(
         StringSession(session_str),
         config.api_id,
@@ -29,6 +32,27 @@ def _get_name(entity) -> str:
         return entity.title
     parts = [getattr(entity, "first_name", None), getattr(entity, "last_name", None)]
     return " ".join(p for p in parts if p) or "Unknown"
+
+
+def _get_username(entity) -> str | None:
+    if entity is None:
+        return None
+    return getattr(entity, "username", None)
+
+
+def _get_sender_id(msg, sender) -> int | None:
+    sender_id = getattr(msg, "sender_id", None)
+    if sender_id is not None:
+        return sender_id
+    if sender is None:
+        return None
+    return getattr(sender, "id", None)
+
+
+def _is_entity_reference(value: str) -> bool:
+    if value.startswith("@") or value.startswith("+") or value.lstrip("-").isdigit():
+        return True
+    return bool(_USERNAME_RE.fullmatch(value))
 
 
 async def _resolve_entity(client: TelegramClient, name: str):
@@ -56,13 +80,51 @@ async def _resolve_entity(client: TelegramClient, name: str):
     )
 
 
-def _msg_to_data(msg, chat_name: str, sender_name: str) -> MessageData:
+async def _resolve_sender(client: TelegramClient, chat_entity, value: str):
+    """Resolve a sender filter within a chat."""
+    if value.lower() == "me":
+        return await client.get_me()
+
+    sender_ref = value.strip()
+    if _is_entity_reference(sender_ref):
+        try:
+            return await client.get_entity(sender_ref)
+        except Exception:  # noqa: S110
+            pass
+
+    participant_search = sender_ref[1:] if sender_ref.startswith("@") else sender_ref
+    username_query = participant_search.lower()
+    display_matches = []
+    async for participant in client.iter_participants(
+        chat_entity, search=participant_search
+    ):
+        username = _get_username(participant)
+        if username and username.lower() == username_query:
+            return participant
+        if _get_name(participant).lower() == sender_ref.lower():
+            display_matches.append(participant)
+
+    if len(display_matches) == 1:
+        return display_matches[0]
+    if len(display_matches) > 1:
+        raise ValueError(
+            f'Found multiple senders named "{value}". Use a username or numeric ID.'
+        )
+    raise ValueError(
+        f'Cannot find sender "{value}" in this chat. Use username, numeric ID, '
+        "or exact display name."
+    )
+
+
+def _msg_to_data(msg, chat_name: str, sender) -> MessageData:
     return MessageData(
         id=msg.id,
         text=msg.text or "",
         chat_name=chat_name,
-        sender_name=sender_name,
+        sender_name=_get_name(sender),
         date=msg.date,
+        sender_username=_get_username(sender),
+        sender_id=_get_sender_id(msg, sender),
         reply_to_msg_id=msg.reply_to.reply_to_msg_id if msg.reply_to else None,
     )
 
@@ -128,7 +190,7 @@ async def read_messages(
 
     from_user = None
     if from_:
-        from_user = await _resolve_entity(client, from_)
+        from_user = await _resolve_sender(client, entity, from_)
 
     filtering = bool(query or from_user)
     filter_query = query.lower() if query else None
@@ -156,7 +218,7 @@ async def read_messages(
             continue
 
         sender = await msg.get_sender()
-        results.append(_msg_to_data(msg, chat_name, _get_name(sender)))
+        results.append(_msg_to_data(msg, chat_name, sender))
         if len(results) >= limit:
             break
 
@@ -205,7 +267,7 @@ async def get_context(
     messages: list[MessageData] = []
     for msg in messages_raw:
         sender = await msg.get_sender()
-        messages.append(_msg_to_data(msg, chat_name, _get_name(sender)))
+        messages.append(_msg_to_data(msg, chat_name, sender))
 
     # Find the replied-to message if applicable
     replied_to = None
@@ -215,6 +277,6 @@ async def get_context(
         reply_msg = await client.get_messages(entity, ids=reply_id)
         if reply_msg:
             sender = await reply_msg.get_sender()
-            replied_to = _msg_to_data(reply_msg, chat_name, _get_name(sender))
+            replied_to = _msg_to_data(reply_msg, chat_name, sender)
 
     return messages, message_id, replied_to

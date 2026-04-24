@@ -37,6 +37,49 @@ class TestAuthLogout:
         assert "Logged out" in result.output
 
 
+class TestAuthMigrateSession:
+    @patch("tgcli.auth.migrate_session")
+    def test_migrate_session_success(self, mock_migrate):
+        mock_migrate.return_value = {
+            "migrated": True,
+            "deleted_keychain": False,
+            "path": "/tmp/session",
+        }
+
+        result = runner.invoke(app, ["auth", "migrate-session"])
+
+        assert result.exit_code == 0
+        mock_migrate.assert_called_once_with(delete_keychain=False)
+        assert "Session migrated to /tmp/session" in result.output
+
+    @patch("tgcli.auth.migrate_session")
+    def test_migrate_session_delete_keychain(self, mock_migrate):
+        mock_migrate.return_value = {
+            "migrated": True,
+            "deleted_keychain": True,
+            "path": "/tmp/session",
+        }
+
+        result = runner.invoke(app, ["auth", "migrate-session", "--delete-keychain"])
+
+        assert result.exit_code == 0
+        mock_migrate.assert_called_once_with(delete_keychain=True)
+        assert "Deleted legacy keychain session" in result.output
+
+    @patch("tgcli.auth.migrate_session")
+    def test_migrate_session_missing(self, mock_migrate):
+        mock_migrate.return_value = {
+            "migrated": False,
+            "deleted_keychain": False,
+            "path": "/tmp/session",
+        }
+
+        result = runner.invoke(app, ["auth", "migrate-session"])
+
+        assert result.exit_code == 1
+        assert "No keychain session found" in result.output
+
+
 class TestAuthStatus:
     @patch("tgcli.auth.get_status", new_callable=AsyncMock)
     def test_status_authenticated(self, mock_status):
@@ -44,6 +87,7 @@ class TestAuthStatus:
             "authenticated": True,
             "phone": "+1***99",
             "session_exists": True,
+            "session_store": "file",
         }
         result = runner.invoke(app, ["auth", "status"])
 
@@ -56,6 +100,7 @@ class TestAuthStatus:
             "authenticated": False,
             "phone": None,
             "session_exists": False,
+            "session_store": "file",
         }
         result = runner.invoke(app, ["auth", "status"])
 
@@ -85,6 +130,7 @@ class TestAuthSmart:
             "authenticated": True,
             "phone": "+1***99",
             "session_exists": True,
+            "session_store": "file",
         }
         result = runner.invoke(app, ["auth"])
 
@@ -103,6 +149,7 @@ class TestAuthSmart:
             "authenticated": False,
             "phone": None,
             "session_exists": False,
+            "session_store": "file",
         }
         result = runner.invoke(app, ["auth"])
 
@@ -126,6 +173,7 @@ class TestAuthSmart:
             "authenticated": False,
             "phone": None,
             "session_exists": False,
+            "session_store": "file",
         }
         # Input: Enter to open browser, api_id, api_hash
         result = runner.invoke(app, ["auth"], input="\n123456\nabc123\n")
@@ -167,6 +215,8 @@ class TestRead:
                 text="hello",
                 chat_name="Group",
                 sender_name="Alice",
+                sender_username="alice_user",
+                sender_id=1001,
                 date=datetime(2025, 6, 15, 12, 0, tzinfo=UTC),
             ),
         ]
@@ -175,6 +225,9 @@ class TestRead:
         assert result.exit_code == 0
         line = json.loads(result.output.strip())
         assert line["text"] == "hello"
+        assert line["sender_name"] == "Alice"
+        assert line["sender_username"] == "alice_user"
+        assert line["sender_id"] == 1001
 
     @patch("tgcli.client.create_client")
     @patch("tgcli.client.read_messages", new_callable=AsyncMock)
@@ -409,6 +462,26 @@ class TestHelp:
         assert "read" in result.output.lower()
         assert "context" in result.output.lower()
         assert "auth" in result.output.lower()
+        assert "JSONL" in result.output
+        assert "sender_username" in result.output
+        assert "sender_id" in result.output
+
+    def test_read_help_describes_sender_filter_and_schema(self):
+        result = runner.invoke(app, ["read", "--help"])
+
+        assert result.exit_code == 0
+        assert "bare username" in result.output
+        assert "numeric user ID" in result.output
+        assert "sender_username" in result.output
+        assert "sender_id" in result.output
+
+    def test_context_help_describes_jsonl_flags(self):
+        result = runner.invoke(app, ["context", "--help"])
+
+        assert result.exit_code == 0
+        assert "same message fields" in result.output
+        assert "target" in result.output
+        assert "replied_to" in result.output
 
     def test_auth_help(self):
         result = runner.invoke(app, ["auth", "--help"])
@@ -416,4 +489,5 @@ class TestHelp:
         assert result.exit_code == 0
         assert "login" in result.output.lower()
         assert "logout" in result.output.lower()
+        assert "migrate-session" in result.output.lower()
         assert "status" in result.output.lower()

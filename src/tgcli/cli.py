@@ -18,7 +18,18 @@ def _version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
-app = typer.Typer(help="Read Telegram messages from the terminal.")
+app = typer.Typer(
+    help=(
+        "Read Telegram messages from the terminal.\n\n"
+        "Default output is JSONL. Use --pretty for human-readable output.\n\n"
+        "Message JSONL fields: id, text, chat_name, sender_name, "
+        "sender_username, sender_id, date, reply_to_msg_id. "
+        "sender_username may be null; sender_id is the most stable sender key.\n\n"
+        "Common flow: `tg chats` to find chat names, `tg read <chat>` to fetch "
+        "or filter messages, `tg context <chat> <message_id>` to inspect nearby "
+        "messages, `tg auth` for login and status."
+    )
+)
 auth_app = typer.Typer(
     help="Manage Telegram authentication.", invoke_without_command=True
 )
@@ -166,7 +177,7 @@ def login() -> None:
 
 @auth_app.command()
 def logout() -> None:
-    """Remove session from system keychain."""
+    """Remove the local session."""
     from tgcli.auth import logout as _logout
 
     try:
@@ -175,6 +186,34 @@ def logout() -> None:
     except Exception as e:
         stderr.print(f"[red]Logout failed:[/red] {e}")
         raise typer.Exit(1)
+
+
+@auth_app.command("migrate-session")
+def migrate_session(
+    delete_keychain: Annotated[
+        bool,
+        typer.Option(
+            "--delete-keychain",
+            help="Delete the legacy keychain session after a successful migration.",
+        ),
+    ] = False,
+) -> None:
+    """Copy the legacy keychain session to the local session file."""
+    from tgcli.auth import migrate_session as _migrate_session
+
+    try:
+        result = _migrate_session(delete_keychain=delete_keychain)
+    except Exception as e:
+        stderr.print(f"[red]Migration failed:[/red] {e}")
+        raise typer.Exit(1)
+
+    if not result["migrated"]:
+        stderr.print("No keychain session found.")
+        raise typer.Exit(1)
+
+    stdout.print(f"Session migrated to {result['path']}.")
+    if result["deleted_keychain"]:
+        stdout.print("Deleted legacy keychain session.")
 
 
 @auth_app.command()
@@ -246,14 +285,34 @@ def chats(
             print(format_chat_jsonl(chat))
 
 
-@app.command()
+@app.command(
+    help=(
+        "Read recent messages from a chat. Newest first by default (--head for "
+        "oldest).\n\n"
+        "Default JSONL includes id, text, chat_name, sender_name, "
+        "sender_username, sender_id, date, and reply_to_msg_id. "
+        "sender_username may be null; sender_id is the most stable sender key.\n\n"
+        "--from accepts me, @username, bare username, numeric user ID, phone, "
+        "or exact display name. Display names can be ambiguous; prefer username "
+        "or numeric ID for automation.\n\n"
+        "Examples: `tg read Team --from takeshi55555`, "
+        '`tg read Team --from @takeshi55555`, `tg read Team --from "Takeshi"`.'
+    )
+)
 def read(
     chat: Annotated[str, typer.Argument(help="Chat or person to read messages from.")],
     query: Annotated[
         str | None, typer.Option("--query", "-q", help="Filter messages by text.")
     ] = None,
     from_: Annotated[
-        str | None, typer.Option("--from", help="Filter by sender.")
+        str | None,
+        typer.Option(
+            "--from",
+            help=(
+                "Filter by sender: me, @username, bare username, numeric user ID, "
+                "phone, or exact display name."
+            ),
+        ),
     ] = None,
     limit: Annotated[int, typer.Option(help="Max messages to return.")] = 50,
     head: Annotated[
@@ -269,7 +328,7 @@ def read(
         bool, typer.Option("--pretty", help="Rich table output instead of JSONL.")
     ] = False,
 ) -> None:
-    """Read recent messages from a chat. Newest first by default (--head for oldest)."""
+    """Read recent messages from a chat."""
     from tgcli.client import create_client, read_messages
 
     try:
@@ -322,7 +381,13 @@ def read(
             print(format_message_jsonl(msg))
 
 
-@app.command()
+@app.command(
+    help=(
+        "View a message with surrounding context.\n\n"
+        "Default JSONL uses the same message fields as `read` and adds boolean "
+        "flags such as target and replied_to on relevant lines."
+    )
+)
 def context(
     chat: str,
     message_id: int,

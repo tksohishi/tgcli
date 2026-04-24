@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from tgcli.auth import get_status, login, logout
+from tgcli.auth import get_status, login, logout, migrate_session
 
 
 class TestLogin:
@@ -60,22 +60,77 @@ class TestLogout:
         mock_delete.assert_called_once()
 
 
+class TestMigrateSession:
+    @patch("tgcli.auth.session_path")
+    @patch("tgcli.auth.save_session")
+    @patch("tgcli.auth.load_session")
+    def test_migrates_keychain_session(self, mock_load, mock_save, mock_path):
+        mock_load.return_value = "legacy_session"
+        mock_path.return_value = "/tmp/session"
+
+        result = migrate_session()
+
+        mock_load.assert_called_once_with(store="keychain")
+        mock_save.assert_called_once_with("legacy_session", store="file")
+        assert result == {
+            "migrated": True,
+            "deleted_keychain": False,
+            "path": "/tmp/session",
+        }
+
+    @patch("tgcli.auth.delete_session")
+    @patch("tgcli.auth.session_path")
+    @patch("tgcli.auth.save_session")
+    @patch("tgcli.auth.load_session")
+    def test_migrates_and_deletes_keychain(
+        self, mock_load, mock_save, mock_path, mock_delete
+    ):
+        mock_load.return_value = "legacy_session"
+        mock_path.return_value = "/tmp/session"
+
+        result = migrate_session(delete_keychain=True)
+
+        mock_save.assert_called_once_with("legacy_session", store="file")
+        mock_delete.assert_called_once_with(store="keychain")
+        assert result["deleted_keychain"] is True
+
+    @patch("tgcli.auth.session_path")
+    @patch("tgcli.auth.save_session")
+    @patch("tgcli.auth.load_session")
+    def test_missing_keychain_session(self, mock_load, mock_save, mock_path):
+        mock_load.return_value = None
+        mock_path.return_value = "/tmp/session"
+
+        result = migrate_session()
+
+        mock_save.assert_not_called()
+        assert result == {
+            "migrated": False,
+            "deleted_keychain": False,
+            "path": "/tmp/session",
+        }
+
+
 class TestGetStatus:
     @patch("tgcli.auth.create_client")
+    @patch("tgcli.auth.load_session_store", return_value="file")
     @patch("tgcli.auth.load_session", return_value=None)
-    async def test_no_session(self, mock_load, mock_create):
+    async def test_no_session(self, mock_load, mock_store, mock_create):
         result = await get_status()
 
         assert result == {
             "authenticated": False,
             "phone": None,
             "session_exists": False,
+            "session_store": "file",
         }
+        mock_load.assert_called_once_with(store="file")
         mock_create.assert_not_called()
 
     @patch("tgcli.auth.create_client")
+    @patch("tgcli.auth.load_session_store", return_value="file")
     @patch("tgcli.auth.load_session", return_value="some_session")
-    async def test_authenticated_with_phone(self, mock_load, mock_create):
+    async def test_authenticated_with_phone(self, mock_load, mock_store, mock_create):
         client = AsyncMock()
         client.is_user_authorized = AsyncMock(return_value=True)
         client.get_me = AsyncMock(return_value=SimpleNamespace(phone="12345678901"))
@@ -85,11 +140,15 @@ class TestGetStatus:
 
         assert result["authenticated"] is True
         assert result["session_exists"] is True
+        assert result["session_store"] == "file"
         assert result["phone"] == "123******01"
 
     @patch("tgcli.auth.create_client")
+    @patch("tgcli.auth.load_session_store", return_value="keychain")
     @patch("tgcli.auth.load_session", return_value="some_session")
-    async def test_session_exists_but_not_authorized(self, mock_load, mock_create):
+    async def test_session_exists_but_not_authorized(
+        self, mock_load, mock_store, mock_create
+    ):
         client = AsyncMock()
         client.is_user_authorized = AsyncMock(return_value=False)
         mock_create.return_value = client
@@ -98,3 +157,5 @@ class TestGetStatus:
 
         assert result["authenticated"] is False
         assert result["session_exists"] is True
+        assert result["session_store"] == "keychain"
+        mock_load.assert_called_once_with(store="keychain")

@@ -21,7 +21,14 @@ def _render(renderable) -> str:
 
 class TestFormatMessageJsonl:
     def test_basic_serialization(self, make_message):
-        msg = make_message(id=1, text="hello", chat_name="Group", sender_name="Bob")
+        msg = make_message(
+            id=1,
+            text="hello",
+            chat_name="Group",
+            sender_name="Bob",
+            sender_username="bob_handle",
+            sender_id=42,
+        )
         line = format_message_jsonl(msg)
         d = json.loads(line)
 
@@ -29,8 +36,18 @@ class TestFormatMessageJsonl:
         assert d["text"] == "hello"
         assert d["chat_name"] == "Group"
         assert d["sender_name"] == "Bob"
+        assert d["sender_username"] == "bob_handle"
+        assert d["sender_id"] == 42
         assert d["date"] == "2025-06-15T12:00:00+00:00"
         assert "target" not in d
+
+    def test_nullable_sender_username(self, make_message):
+        msg = make_message(sender_username=None, sender_id=42)
+        line = format_message_jsonl(msg)
+        d = json.loads(line)
+
+        assert d["sender_username"] is None
+        assert d["sender_id"] == 42
 
     def test_flags_included_when_true(self, make_message):
         msg = make_message(id=2)
@@ -109,10 +126,21 @@ class TestFormatAuthStatus:
 
         assert "authenticated" in output
         assert "+1***99" in output
-        assert "keychain" in output
+        assert "stored locally" in output
+
+    def test_authenticated_keychain(self):
+        output = _render(
+            format_auth_status(
+                authenticated=True,
+                session_exists=True,
+                session_store="keychain",
+            )
+        )
+
+        assert "stored in keychain" in output
 
     def test_not_authenticated(self):
         output = _render(format_auth_status(authenticated=False, session_exists=False))
 
         assert "not authenticated" in output
-        assert "none" in output
+        assert "none (file)" in output
