@@ -195,6 +195,22 @@ class TestReadMessages:
         assert call_kwargs["reverse"] is False
         assert [m.id for m in results] == [1]
 
+    async def test_read_chronological_after_filters_correctly(self, client):
+        cutoff = datetime(2025, 3, 1, tzinfo=UTC)
+        # iter_messages yields newest-first, as the real API does.
+        msgs = [
+            _mock_msg(3, "apr", date=datetime(2025, 4, 1, tzinfo=UTC)),
+            _mock_msg(2, "mar", date=datetime(2025, 3, 1, tzinfo=UTC)),
+            _mock_msg(1, "jan", date=datetime(2025, 1, 1, tzinfo=UTC)),
+        ]
+        client.iter_messages = MagicMock(return_value=_async_iter(msgs))
+
+        results = await read_messages(client, "Group", after=cutoff, chronological=True)
+
+        # jan (1/1) is before the cutoff, so iteration breaks before it;
+        # apr and mar remain, reversed to oldest-first for display.
+        assert [m.id for m in results] == [2, 3]
+
     async def test_read_query_filters_client_side(self, client):
         msgs = [_mock_msg(1, "hello world"), _mock_msg(2, "goodbye")]
         client.iter_messages = MagicMock(return_value=_async_iter(msgs))
