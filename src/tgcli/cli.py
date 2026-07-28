@@ -288,7 +288,7 @@ def chats(
 @app.command(
     help=(
         "Read recent messages from a chat. Newest first by default (--head for "
-        "oldest).\n\n"
+        "oldest, --chrono for the recent window in chronological order).\n\n"
         "Default JSONL includes id, text, chat_name, sender_name, "
         "sender_username, sender_id, date, and reply_to_msg_id. "
         "sender_username may be null; sender_id is the most stable sender key.\n\n"
@@ -314,9 +314,25 @@ def read(
             ),
         ),
     ] = None,
-    limit: Annotated[int, typer.Option(help="Max messages to return.")] = 50,
+    limit: Annotated[
+        int | None,
+        typer.Option(
+            help="Max messages to return. Default 50, or 12 with --chrono.",
+            show_default=False,
+        ),
+    ] = None,
     head: Annotated[
         bool, typer.Option("--head", help="Oldest messages first.")
+    ] = False,
+    chrono: Annotated[
+        bool,
+        typer.Option(
+            "--chrono",
+            help=(
+                "Recent messages in chronological order (oldest first, newest "
+                "last). Defaults to 12 messages; use --limit for more or fewer."
+            ),
+        ),
     ] = False,
     after: Annotated[
         str | None, typer.Option(help="Only messages after this date (YYYY-MM-DD).")
@@ -330,6 +346,12 @@ def read(
 ) -> None:
     """Read recent messages from a chat."""
     from tgcli.client import create_client, read_messages
+
+    if head and chrono:
+        stderr.print("[red]--head and --chrono cannot be used together.[/red]")
+        raise typer.Exit(1)
+
+    effective_limit = limit if limit is not None else (12 if chrono else 50)
 
     try:
         after_dt = _parse_date(after) if after else None
@@ -347,10 +369,11 @@ def read(
                 chat,
                 query=query or "",
                 from_=from_,
-                limit=limit,
+                limit=effective_limit,
                 after=after_dt,
                 before=before_dt,
                 reverse=head,
+                chronological=chrono,
             )
 
     try:

@@ -178,10 +178,14 @@ async def read_messages(
     after: datetime | None = None,
     before: datetime | None = None,
     reverse: bool = False,
+    chronological: bool = False,
 ) -> list[MessageData]:
     """Read messages from a chat.
 
-    Default order is newest first (tail). Set reverse=True for oldest first (head).
+    Default order is newest first (tail). Set reverse=True for oldest first,
+    paging from the start of the chat's history (head). Set chronological=True
+    to keep the normal recent window but reverse it for display, oldest first
+    with the newest message last.
     Optional query does client-side text filtering. Optional from_ filters by sender
     (resolved server-side via from_user).
     """
@@ -222,6 +226,8 @@ async def read_messages(
         if len(results) >= limit:
             break
 
+    if chronological:
+        results.reverse()
     return results
 
 

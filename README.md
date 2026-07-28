@@ -122,8 +122,9 @@ Read recent messages from a chat. Returns JSONL by default, newest first.
 |----------------|----------------------------------------|
 | `--query`/`-q` | Filter messages by text                |
 | `--from`       | Filter by sender                       |
-| `--limit`      | Max messages (default 50)              |
+| `--limit`      | Max messages (default 50, or 12 with `--chrono`) |
 | `--head`       | Oldest messages first                  |
+| `--chrono`     | Recent messages in chronological order (oldest first, newest last); default 12 |
 | `--after`      | Only messages after date (YYYY-MM-DD)  |
 | `--before`     | Only messages before date (YYYY-MM-DD) |
 | `--pretty`     | Rich table output instead of JSONL     |

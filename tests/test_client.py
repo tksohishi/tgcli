@@ -156,6 +156,45 @@ class TestReadMessages:
         assert call_kwargs["offset_date"] is None
         assert [m.id for m in results] == [1]
 
+    async def test_read_chronological(self, client):
+        msgs = [_mock_msg(2, "newest"), _mock_msg(1, "oldest")]
+        client.iter_messages = MagicMock(return_value=_async_iter(msgs))
+
+        results = await read_messages(client, "Group", chronological=True)
+
+        assert [m.id for m in results] == [1, 2]
+        call_kwargs = client.iter_messages.call_args[1]
+        assert call_kwargs["reverse"] is False
+
+    async def test_read_chronological_respects_limit(self, client):
+        # iter_messages yields newest-first, as the real API does.
+        msgs = [_mock_msg(i, f"msg{i}") for i in range(5, 0, -1)]
+        client.iter_messages = MagicMock(return_value=_async_iter(msgs))
+
+        results = await read_messages(client, "Group", chronological=True, limit=3)
+
+        # Only the 3 most recent messages (5, 4, 3), oldest-to-newest.
+        assert [m.id for m in results] == [3, 4, 5]
+
+    async def test_read_chronological_before_filters_correctly(self, client):
+        cutoff = datetime(2025, 3, 1, tzinfo=UTC)
+        # iter_messages yields newest-first, as the real API does.
+        msgs = [
+            _mock_msg(3, "apr", date=datetime(2025, 4, 1, tzinfo=UTC)),
+            _mock_msg(2, "mar", date=datetime(2025, 3, 1, tzinfo=UTC)),
+            _mock_msg(1, "jan", date=datetime(2025, 1, 1, tzinfo=UTC)),
+        ]
+        client.iter_messages = MagicMock(return_value=_async_iter(msgs))
+
+        results = await read_messages(
+            client, "Group", before=cutoff, chronological=True
+        )
+
+        call_kwargs = client.iter_messages.call_args[1]
+        assert call_kwargs["offset_date"] == cutoff
+        assert call_kwargs["reverse"] is False
+        assert [m.id for m in results] == [1]
+
     async def test_read_query_filters_client_side(self, client):
         msgs = [_mock_msg(1, "hello world"), _mock_msg(2, "goodbye")]
         client.iter_messages = MagicMock(return_value=_async_iter(msgs))

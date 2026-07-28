@@ -228,6 +228,7 @@ class TestRead:
         assert line["sender_name"] == "Alice"
         assert line["sender_username"] == "alice_user"
         assert line["sender_id"] == 1001
+        assert mock_read.call_args[1]["limit"] == 50
 
     @patch("tgcli.client.create_client")
     @patch("tgcli.client.read_messages", new_callable=AsyncMock)
@@ -301,6 +302,49 @@ class TestRead:
         mock_read.assert_awaited_once()
         call_kwargs = mock_read.call_args[1]
         assert call_kwargs["reverse"] is True
+        assert call_kwargs["limit"] == 50
+
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.read_messages", new_callable=AsyncMock)
+    def test_read_chrono(self, mock_read, mock_create):
+        client = AsyncMock()
+        mock_create.return_value = client
+        mock_read.return_value = [
+            MessageData(
+                id=1,
+                text="oldest",
+                chat_name="Group",
+                sender_name="Alice",
+                date=datetime(2025, 6, 15, 12, 0, tzinfo=UTC),
+            ),
+        ]
+        result = runner.invoke(app, ["read", "Group", "--chrono"])
+
+        assert result.exit_code == 0
+        mock_read.assert_awaited_once()
+        call_kwargs = mock_read.call_args[1]
+        assert call_kwargs["chronological"] is True
+        assert call_kwargs["reverse"] is False
+        assert call_kwargs["limit"] == 12
+
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.read_messages", new_callable=AsyncMock)
+    def test_read_chrono_custom_limit(self, mock_read, mock_create):
+        client = AsyncMock()
+        mock_create.return_value = client
+        mock_read.return_value = []
+
+        result = runner.invoke(app, ["read", "Group", "--chrono", "--limit", "5"])
+
+        assert result.exit_code == 0
+        call_kwargs = mock_read.call_args[1]
+        assert call_kwargs["limit"] == 5
+
+    def test_read_head_and_chrono_conflict(self):
+        result = runner.invoke(app, ["read", "Group", "--head", "--chrono"])
+
+        assert result.exit_code == 1
+        assert "cannot be used together" in result.output
 
     def test_read_invalid_date(self):
         result = runner.invoke(app, ["read", "Group", "--after", "not-a-date"])
