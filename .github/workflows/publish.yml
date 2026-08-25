@@ -88,14 +88,15 @@ jobs:
       contents: read
     env:
       TAP_REPO: tksohishi/homebrew-tap
-      TAP_TOKEN: ${{ secrets.TAP_GH_TOKEN }}
     steps:
-      - name: Validate tap token
-        run: |
-          if [ -z "${TAP_TOKEN}" ]; then
-            echo "TAP_GH_TOKEN is required to update homebrew-tap."
-            exit 1
-          fi
+      - name: Mint tap token
+        id: tap-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.TAP_APP_ID }}
+          private-key: ${{ secrets.TAP_APP_PRIVATE_KEY }}
+          owner: tksohishi
+          repositories: homebrew-tap
 
       - name: Resolve PyPI source artifact
         env:
@@ -121,7 +122,7 @@ jobs:
 
       - name: Update formula in tap repo
         run: |
-          git clone "https://x-access-token:${TAP_TOKEN}@github.com/${TAP_REPO}.git" tap-repo
+          git clone "https://x-access-token:${{ steps.tap-token.outputs.token }}@github.com/${TAP_REPO}.git" tap-repo
           python3 <<'PY'
           import os
           import re
