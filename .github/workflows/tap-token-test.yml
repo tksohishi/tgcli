@@ -1,0 +1,22 @@
+name: Tap token test
+on: workflow_dispatch
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - id: tap-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.TAP_APP_ID }}
+          private-key: ${{ secrets.TAP_APP_PRIVATE_KEY }}
+          owner: tksohishi
+          repositories: homebrew-tap
+      - run: |
+          git clone "https://x-access-token:${{ steps.tap-token.outputs.token }}@github.com/tksohishi/homebrew-tap.git" tap-repo
+          cd tap-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit --allow-empty -m "Test GitHub App push access"
+          git push
