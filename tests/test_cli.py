@@ -360,6 +360,153 @@ class TestRead:
         assert call_kwargs["from_"] == "Alice"
 
 
+class TestMediaFields:
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.read_messages", new_callable=AsyncMock)
+    def test_read_jsonl_without_media(self, mock_read, mock_create):
+        mock_create.return_value = AsyncMock()
+        mock_read.return_value = [
+            MessageData(
+                id=1,
+                text="hello",
+                chat_name="Group",
+                sender_name="Alice",
+                date=datetime(2025, 6, 15, 12, 0, tzinfo=UTC),
+            ),
+        ]
+        result = runner.invoke(app, ["read", "Group"])
+
+        assert result.exit_code == 0
+        line = json.loads(result.output.strip())
+        assert line["media_type"] is None
+        assert line["media_filename"] is None
+        assert list(line)[-2:] == ["media_type", "media_filename"]
+
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.read_messages", new_callable=AsyncMock)
+    def test_read_jsonl_with_media(self, mock_read, mock_create):
+        mock_create.return_value = AsyncMock()
+        mock_read.return_value = [
+            MessageData(
+                id=1,
+                text="see attached",
+                chat_name="Group",
+                sender_name="Alice",
+                date=datetime(2025, 6, 15, 12, 0, tzinfo=UTC),
+                media_type="document",
+                media_filename="report.pdf",
+            ),
+        ]
+        result = runner.invoke(app, ["read", "Group"])
+
+        assert result.exit_code == 0
+        line = json.loads(result.output.strip())
+        assert line["media_type"] == "document"
+        assert line["media_filename"] == "report.pdf"
+
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.read_messages", new_callable=AsyncMock)
+    def test_read_pretty_marks_media_without_filename(self, mock_read, mock_create):
+        mock_create.return_value = AsyncMock()
+        mock_read.return_value = [
+            MessageData(
+                id=1,
+                text="",
+                chat_name="Group",
+                sender_name="Alice",
+                date=datetime(2025, 6, 15, 12, 0, tzinfo=UTC),
+                media_type="photo",
+                media_filename="secret.jpg",
+            ),
+        ]
+        result = runner.invoke(app, ["read", "Group", "--pretty"])
+
+        assert result.exit_code == 0
+        assert "[photo]" in result.output
+        assert "secret.jpg" not in result.output
+
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.read_messages", new_callable=AsyncMock)
+    def test_read_pretty_escapes_attacker_markup(self, mock_read, mock_create):
+        mock_create.return_value = AsyncMock()
+        mock_read.return_value = [
+            MessageData(
+                id=1,
+                text="hi [/bold] [link=file:///etc/passwd]click[/link]",
+                chat_name="[red]Group",
+                sender_name="[bold]Alice",
+                date=datetime(2025, 6, 15, 12, 0, tzinfo=UTC),
+            ),
+        ]
+        result = runner.invoke(app, ["read", "Group", "--pretty"])
+
+        assert result.exit_code == 0
+        assert "[/bold]" in result.output
+        assert "[red]Group" in result.output
+
+
+class TestMedia:
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.download_media", new_callable=AsyncMock)
+    def test_media_prints_json(self, mock_download, mock_create):
+        mock_create.return_value = AsyncMock()
+        mock_download.return_value = ("/tmp/out/report.pdf", "document")
+
+        result = runner.invoke(app, ["media", "Group", "10", "--out", "/tmp/out"])
+
+        assert result.exit_code == 0
+        line = json.loads(result.output.strip())
+        assert line == {
+            "id": 10,
+            "path": "/tmp/out/report.pdf",
+            "media_type": "document",
+        }
+        mock_download.assert_awaited_once()
+        assert mock_download.call_args[0][1:] == ("Group", 10, "/tmp/out")
+        assert mock_download.call_args[1] == {
+            "allow_archives": False,
+            "max_bytes": 100 * 1024 * 1024,
+        }
+
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.download_media", new_callable=AsyncMock)
+    def test_media_allow_archives_flag(self, mock_download, mock_create):
+        mock_create.return_value = AsyncMock()
+        mock_download.return_value = ("/tmp/out/data.zip", "document")
+
+        result = runner.invoke(
+            app, ["media", "Group", "10", "--allow-archives", "--max-size", "5"]
+        )
+
+        assert result.exit_code == 0
+        assert mock_download.call_args[1] == {
+            "allow_archives": True,
+            "max_bytes": 5 * 1024 * 1024,
+        }
+
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.download_media", new_callable=AsyncMock)
+    def test_media_no_attachment_exits_1(self, mock_download, mock_create):
+        mock_create.return_value = AsyncMock()
+        mock_download.side_effect = ValueError("Message 10 has no downloadable media.")
+
+        result = runner.invoke(app, ["media", "Group", "10"])
+
+        assert result.exit_code == 1
+        assert "no downloadable media" in result.output
+
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.download_media", new_callable=AsyncMock)
+    def test_media_unauthorized_exits_2(self, mock_download, mock_create):
+        mock_create.return_value = AsyncMock()
+        mock_download.side_effect = UnauthorizedError(None, None)
+
+        result = runner.invoke(app, ["media", "Group", "10"])
+
+        assert result.exit_code == 2
+        assert "Not authenticated" in result.output
+
+
 class TestContext:
     @patch("tgcli.client.create_client")
     @patch("tgcli.client.get_context", new_callable=AsyncMock)
@@ -465,6 +612,8 @@ class TestHelp:
         assert "JSONL" in result.output
         assert "sender_username" in result.output
         assert "sender_id" in result.output
+        assert "media_type" in result.output
+        assert "media" in result.output
 
     def test_read_help_describes_sender_filter_and_schema(self):
         result = runner.invoke(app, ["read", "--help"])
@@ -474,6 +623,8 @@ class TestHelp:
         assert "numeric user ID" in result.output
         assert "sender_username" in result.output
         assert "sender_id" in result.output
+        assert "media_type" in result.output
+        assert "media_filename" in result.output
 
     def test_context_help_describes_jsonl_flags(self):
         result = runner.invoke(app, ["context", "--help"])
@@ -482,6 +633,17 @@ class TestHelp:
         assert "same message fields" in result.output
         assert "target" in result.output
         assert "replied_to" in result.output
+        assert "media_type" in result.output
+        assert "media_filename" in result.output
+
+    def test_media_help(self):
+        result = runner.invoke(app, ["media", "--help"])
+
+        assert result.exit_code == 0
+        assert "media_type" in result.output
+        assert "--out" in result.output
+        assert "--allow-archives" in result.output
+        assert "no downloadable media" in result.output
 
     def test_auth_help(self):
         result = runner.invoke(app, ["auth", "--help"])

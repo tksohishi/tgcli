@@ -4,6 +4,7 @@ import json
 from dataclasses import asdict, dataclass
 from datetime import datetime
 
+from rich.markup import escape
 from rich.table import Table
 from rich.text import Text
 
@@ -27,6 +28,8 @@ class MessageData:
     sender_username: str | None = None
     sender_id: int | None = None
     reply_to_msg_id: int | None = None
+    media_type: str | None = None
+    media_filename: str | None = None
 
 
 def _truncate(text: str, max_lines: int = 3) -> str:
@@ -50,6 +53,14 @@ def format_message_jsonl(msg: MessageData, **flags: bool) -> str:
     return json.dumps(d, ensure_ascii=False)
 
 
+def _message_cell(msg: MessageData) -> str:
+    text = escape(_truncate(msg.text))
+    if msg.media_type:
+        marker = escape(f"[{msg.media_type}]")
+        return f"{text} {marker}" if text else marker
+    return text
+
+
 def format_search_results(messages: list[MessageData]) -> Table:
     """Build a Rich Table for search results."""
     table = Table(show_header=True, header_style="bold")
@@ -61,9 +72,9 @@ def format_search_results(messages: list[MessageData]) -> Table:
     for msg in messages:
         table.add_row(
             msg.date.strftime("%Y-%m-%d %H:%M"),
-            msg.chat_name,
-            msg.sender_name,
-            _truncate(msg.text),
+            escape(msg.chat_name),
+            escape(msg.sender_name),
+            _message_cell(msg),
         )
 
     return table
@@ -120,7 +131,7 @@ def format_chats_table(chats: list[ChatData]) -> Table:
     for chat in chats:
         unread = str(chat.unread_count) if chat.unread_count else ""
         date = chat.date.strftime("%Y-%m-%d") if chat.date else ""
-        table.add_row(chat.name, chat.chat_type, unread, date)
+        table.add_row(escape(chat.name), chat.chat_type, unread, date)
 
     return table
 

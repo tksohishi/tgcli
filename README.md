@@ -67,6 +67,12 @@ tg read "Finance Team" -q "deadline" --from "Alice" --after 2025-01-01
 tg context "Finance Team" 12345
 ```
 
+### 5. Download Attachments
+
+```bash
+tg media "Finance Team" 12345 --out ./downloads
+```
+
 ## Use with AI Agents
 
 Once authenticated, any AI coding agent with shell access can use tgcli directly. A few examples:
@@ -127,6 +133,22 @@ Read recent messages from a chat. Returns JSONL by default, newest first.
 | `--after`      | Only messages after date (YYYY-MM-DD)  |
 | `--before`     | Only messages before date (YYYY-MM-DD) |
 | `--pretty`     | Rich table output instead of JSONL     |
+
+JSONL fields: `id`, `text`, `chat_name`, `sender_name`, `sender_username`, `sender_id`, `date`, `reply_to_msg_id`, `media_type`, `media_filename`. `media_type` is `null` or one of `photo`, `document`, `video`, `voice`, `sticker`, `webpage`, `other`; `media_filename` is the document's original filename when present. `--pretty` marks attachments with a `[photo]`-style tag.
+
+### `tg media <chat> <message_id>`
+
+Download the attachment of one message. Prints a single JSON line with `id`, `path`, and `media_type`. Fails when the message has no downloadable media (webpage previews count as no media) or the id is not found.
+
+Only known media and document types are saved (images, video, audio, PDF, office files, text). Archives (zip, 7z, tar, gz, rar) need `--allow-archives`. Executables, scripts, installers, shortcuts, disk images, HTML, SVG, and XML are refused by extension and mime type. After the transfer, the file's leading and trailing bytes are checked too: Windows, ELF, and Mach-O binaries, shebang scripts, Windows shortcuts, cabinet and installer packages, DMG and ISO images, and archives or compound files renamed to a document extension are deleted and reported. Office documents with macros, RTF, and CSV are still saved; they are documents, not programs, so open them with the same care as any attachment. Attachments are refused before transfer when the reported size exceeds `--max-size` MB (default 100), and the transfer itself is cut off at that limit.
+
+tgcli chooses the saved filename itself: `<message_id>_<sanitized original name>`, or `<media_type>_<message_id>.<ext>` when the message has no filename. It downloads into a staging file it created, never overwrites an existing file, and never follows a symlink in the output directory.
+
+| Flag               | Description                            |
+|--------------------|----------------------------------------|
+| `--out`            | Directory to save into (default cwd)   |
+| `--allow-archives` | Also download zip/7z/tar/gz/rar files  |
+| `--max-size`       | Size limit in MB (default 100)         |
 
 ### `tg update`
 

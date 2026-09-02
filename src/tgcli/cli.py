@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import subprocess
 from datetime import UTC, datetime
@@ -23,11 +24,13 @@ app = typer.Typer(
         "Read Telegram messages from the terminal.\n\n"
         "Default output is JSONL. Use --pretty for human-readable output.\n\n"
         "Message JSONL fields: id, text, chat_name, sender_name, "
-        "sender_username, sender_id, date, reply_to_msg_id. "
+        "sender_username, sender_id, date, reply_to_msg_id, media_type, "
+        "media_filename. "
         "sender_username may be null; sender_id is the most stable sender key.\n\n"
         "Common flow: `tg chats` to find chat names, `tg read <chat>` to fetch "
         "or filter messages, `tg context <chat> <message_id>` to inspect nearby "
-        "messages, `tg auth` for login and status."
+        "messages, `tg media <chat> <message_id>` to download an attachment, "
+        "`tg auth` for login and status."
     )
 )
 auth_app = typer.Typer(
@@ -290,8 +293,11 @@ def chats(
         "Read recent messages from a chat. Newest first by default (--head for "
         "oldest).\n\n"
         "Default JSONL includes id, text, chat_name, sender_name, "
-        "sender_username, sender_id, date, and reply_to_msg_id. "
-        "sender_username may be null; sender_id is the most stable sender key.\n\n"
+        "sender_username, sender_id, date, reply_to_msg_id, media_type, and "
+        "media_filename. sender_username may be null; sender_id is the most "
+        "stable sender key. media_type is null or one of photo, document, video, "
+        "voice, sticker, webpage, other; media_filename is the document's "
+        "original filename when present.\n\n"
         "--from accepts me, @username, bare username, numeric user ID, phone, "
         "or exact display name. Display names can be ambiguous; prefer username "
         "or numeric ID for automation.\n\n"
@@ -384,8 +390,9 @@ def read(
 @app.command(
     help=(
         "View a message with surrounding context.\n\n"
-        "Default JSONL uses the same message fields as `read` and adds boolean "
-        "flags such as target and replied_to on relevant lines."
+        "Default JSONL uses the same message fields as `read` (including "
+        "media_type and media_filename) and adds boolean flags such as target "
+        "and replied_to on relevant lines."
     )
 )
 def context(
@@ -439,3 +446,64 @@ def context(
                     replied_to=(msg.id == replied_to_id),
                 )
             )
+
+
+@app.command(
+    help=(
+        "Download the attachment of one message.\n\n"
+        "Prints a single JSON line with id, path, and media_type. Fails when "
+        "the message has no downloadable media (webpage previews count as "
+        "no media) or the id is not found. Executables, scripts, installers, "
+        "and files whose content is an executable in disguise are refused. "
+        "Archives (zip, 7z, tar, ...) are refused unless --allow-archives is set. "
+        "The file is saved under a name tgcli picks (<message_id>_<original name>, "
+        "or <media_type>_<message_id>.<ext>), never overwriting an existing file."
+    )
+)
+def media(
+    chat: str,
+    message_id: int,
+    out: Annotated[
+        str,
+        typer.Option("--out", help="Directory to save into (default: cwd)."),
+    ] = ".",
+    allow_archives: Annotated[
+        bool,
+        typer.Option("--allow-archives", help="Also download zip/7z/tar archives."),
+    ] = False,
+    max_size: Annotated[
+        int,
+        typer.Option("--max-size", help="Refuse attachments larger than this many MB."),
+    ] = 100,
+) -> None:
+    """Download the attachment of one message."""
+    from tgcli.client import create_client, download_media
+
+    os.makedirs(out, exist_ok=True)
+
+    async def _run():
+        client = create_client()
+        async with client:
+            return await download_media(
+                client,
+                chat,
+                message_id,
+                out,
+                allow_archives=allow_archives,
+                max_bytes=max_size * 1024 * 1024,
+            )
+
+    try:
+        path, media_type = asyncio.run(_run())
+    except SystemExit as e:
+        stderr.print(f"[red]Configuration error:[/red] {e}")
+        stderr.print("Run `tg auth` to set up.")
+        raise typer.Exit(1)
+    except UnauthorizedError:
+        stderr.print("[red]Not authenticated.[/red] Run `tg auth login` first.")
+        raise typer.Exit(2)
+    except Exception as e:
+        stderr.print(f"[red]Download failed:[/red] {e}")
+        raise typer.Exit(1)
+
+    print(json.dumps({"id": message_id, "path": path, "media_type": media_type}))
