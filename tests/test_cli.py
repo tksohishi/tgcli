@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -641,12 +642,13 @@ class TestHelp:
 
         assert result.exit_code == 0
         assert "media_type" in result.output
-        # Rich splits option dashes into separate style spans under FORCE_COLOR,
-        # so match the option names without the leading dashes.
-        assert "-out" in result.output
-        assert "-allow-archives" in result.output
-        assert "-max-size" in result.output
-        assert "no downloadable media" in result.output
+        # CI renders help with color, and Rich splits option names into
+        # several style spans, so strip ANSI codes before matching.
+        plain = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+        assert "--out" in plain
+        assert "--allow-archives" in plain
+        assert "--max-size" in plain
+        assert "no downloadable media" in plain
 
     def test_auth_help(self):
         result = runner.invoke(app, ["auth", "--help"])
