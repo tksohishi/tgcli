@@ -641,8 +641,11 @@ class TestHelp:
 
         assert result.exit_code == 0
         assert "media_type" in result.output
-        assert "--out" in result.output
-        assert "--allow-archives" in result.output
+        # Rich splits option dashes into separate style spans under FORCE_COLOR,
+        # so match the option names without the leading dashes.
+        assert "-out" in result.output
+        assert "-allow-archives" in result.output
+        assert "-max-size" in result.output
         assert "no downloadable media" in result.output
 
     def test_auth_help(self):
