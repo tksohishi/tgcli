@@ -6,7 +6,9 @@ from io import StringIO
 from rich.console import Console
 
 from tgcli.formatting import (
+    ChatData,
     format_auth_status,
+    format_chat_jsonl,
     format_context,
     format_message_jsonl,
     format_search_results,
@@ -17,6 +19,27 @@ def _render(renderable) -> str:
     buf = StringIO()
     Console(file=buf, width=120, force_terminal=True).print(renderable)
     return buf.getvalue()
+
+
+class TestFormatChatJsonl:
+    def test_includes_numeric_entity_id(self):
+        chat = ChatData(
+            id=123,
+            name="Mira Vale | Example",
+            chat_type="user",
+            unread_count=0,
+            pinned=False,
+            date=None,
+        )
+
+        assert json.loads(format_chat_jsonl(chat)) == {
+            "id": 123,
+            "name": "Mira Vale | Example",
+            "chat_type": "user",
+            "unread_count": 0,
+            "pinned": False,
+            "date": None,
+        }
 
 
 class TestFormatMessageJsonl:

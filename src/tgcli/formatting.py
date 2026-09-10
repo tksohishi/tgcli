@@ -11,6 +11,7 @@ from rich.text import Text
 
 @dataclass(frozen=True)
 class ChatData:
+    id: int
     name: str
     chat_type: str
     unread_count: int

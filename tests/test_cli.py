@@ -3,13 +3,15 @@ from __future__ import annotations
 import json
 import re
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from telethon.errors import UnauthorizedError
 from typer.testing import CliRunner
 
 from tgcli.cli import app
-from tgcli.formatting import MessageData
+from tgcli.formatting import ChatData, MessageData
 
 runner = CliRunner()
 
@@ -191,6 +193,49 @@ class TestAuthSmart:
 
 
 class TestChats:
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.list_chats", new_callable=AsyncMock)
+    def test_chats_jsonl_includes_id(self, mock_list_chats, mock_create):
+        mock_create.return_value = AsyncMock()
+        mock_list_chats.return_value = [
+            ChatData(
+                id=123,
+                name="Mira Vale | Example",
+                chat_type="user",
+                unread_count=0,
+                pinned=False,
+                date=None,
+            )
+        ]
+
+        result = runner.invoke(app, ["chats"])
+
+        assert result.exit_code == 0
+        assert json.loads(result.stdout)["id"] == 123
+        assert result.stderr == ""
+
+    @patch("tgcli.client.create_client")
+    def test_chats_lists_entity_id_from_dialog(self, mock_create):
+        async def dialogs(**kwargs):
+            yield SimpleNamespace(
+                id=-1000000000123,
+                name="Mira Vale | Example",
+                entity=SimpleNamespace(id=123),
+                unread_count=0,
+                pinned=False,
+                date=None,
+            )
+
+        client = AsyncMock()
+        client.iter_dialogs = MagicMock(side_effect=dialogs)
+        mock_create.return_value = client
+
+        result = runner.invoke(app, ["chats", "--filter", "mira"])
+
+        assert result.exit_code == 0
+        assert json.loads(result.stdout)["id"] == 123
+        assert result.stderr == ""
+
     @patch("tgcli.client.create_client")
     @patch("tgcli.client.list_chats", new_callable=AsyncMock)
     def test_chats_unauthorized_exits_2(self, mock_list_chats, mock_create):
@@ -601,7 +646,150 @@ class TestContext:
         assert "Configuration error" in result.output
 
 
+class TestChatResolutionFailures:
+    @pytest.mark.parametrize("exact", [False, True])
+    @patch("tgcli.client.create_client")
+    def test_read_resolution_notice_keeps_stdout_jsonl(self, mock_create, exact):
+        name = "Mira Vale" if exact else "Mira Vale | Example"
+        entity = SimpleNamespace(id=123, first_name=name, last_name=None)
+        message = SimpleNamespace(
+            id=10,
+            text="hello",
+            date=datetime(2025, 6, 15, tzinfo=UTC),
+            reply_to=None,
+            media=None,
+            sender_id=123,
+            get_sender=AsyncMock(return_value=entity),
+        )
+
+        async def dialogs():
+            yield SimpleNamespace(name=name, entity=entity)
+
+        async def messages(*args, **kwargs):
+            yield message
+
+        client = AsyncMock()
+        client.iter_dialogs = MagicMock(side_effect=dialogs)
+        client.iter_messages = MagicMock(side_effect=messages)
+        mock_create.return_value = client
+
+        result = runner.invoke(app, ["read", "Mira Vale"])
+
+        assert result.exit_code == 0
+        assert json.loads(result.stdout)["chat_name"] == name
+        assert result.stderr == (
+            "" if exact else 'Resolved "Mira Vale" -> "Mira Vale | Example"\n'
+        )
+
+    @pytest.mark.parametrize("command", ["read", "context", "media"])
+    @pytest.mark.parametrize(
+        ("query", "names", "candidates"),
+        [
+            (
+                "Mira Vale",
+                ["Mira Vale | Example", "Mira Vale | Studio"],
+                ["Mira Vale | Example", "Mira Vale | Studio"],
+            ),
+            ("zzzzzz", ["Project Alpha"], []),
+            ("mira vlae", ["Mira Vale"], ["Mira Vale"]),
+        ],
+    )
+    @patch("tgcli.client.create_client")
+    def test_actual_resolver_errors_emit_json_to_stderr(
+        self, mock_create, command, query, names, candidates
+    ):
+        async def dialogs():
+            for index, name in enumerate(names):
+                yield SimpleNamespace(name=name, entity=SimpleNamespace(id=index))
+
+        client = AsyncMock()
+        client.iter_dialogs = MagicMock(side_effect=dialogs)
+        mock_create.return_value = client
+        args = [command, query]
+        if command != "read":
+            args.append("10")
+
+        result = runner.invoke(app, args)
+
+        assert result.exit_code == 1
+        assert result.stdout == ""
+        assert f'Cannot find chat "{query}"' in result.stderr
+        json_lines = [
+            line for line in result.stderr.splitlines() if line.startswith("{")
+        ]
+        assert len(json_lines) == 1
+        assert json.loads(json_lines[0]) == {
+            "error": "chat_not_found",
+            "query": query,
+            "candidates": candidates,
+        }
+        human_lines = result.stderr.splitlines()[:-1]
+        for candidate in candidates:
+            assert json.dumps(candidate) in [line.rstrip("?") for line in human_lines]
+        client.iter_dialogs.assert_called_once_with()
+
+    @pytest.mark.parametrize("command", ["read", "context", "media"])
+    @patch("tgcli.client.create_client")
+    def test_structured_error_preserves_long_and_special_names(
+        self, mock_create, command
+    ):
+        from tgcli.client import ChatResolutionError
+
+        query = 'Mira "[red]" \\ 雪\n' + "long name " * 30
+        candidates = [query + " Example", query + " Studio"]
+        mock_create.return_value = AsyncMock()
+        operation = {
+            "read": "read_messages",
+            "context": "get_context",
+            "media": "download_media",
+        }[command]
+        args = [command, query] + ([] if command == "read" else ["10"])
+        with patch(
+            f"tgcli.client.{operation}",
+            new_callable=AsyncMock,
+            side_effect=ChatResolutionError(query, candidates),
+        ):
+            result = runner.invoke(app, args)
+
+        assert result.exit_code == 1
+        assert result.stdout == ""
+        lines = [line for line in result.stderr.splitlines() if line.startswith("{")]
+        assert len(lines) == 1
+        assert json.loads(lines[0]) == {
+            "error": "chat_not_found",
+            "query": query,
+            "candidates": candidates,
+        }
+
+    @pytest.mark.parametrize("chat_id", ["123", "-123", "-1000000000123"])
+    @patch("tgcli.client.create_client")
+    def test_numeric_chat_id_reaches_resolver(self, mock_create, chat_id):
+        async def messages(*args, **kwargs):
+            if False:
+                yield
+
+        client = AsyncMock()
+        client.iter_messages = MagicMock(side_effect=messages)
+        mock_create.return_value = client
+
+        result = runner.invoke(app, ["read", "--", chat_id])
+
+        assert result.exit_code == 0
+        client.get_entity.assert_awaited_once_with(int(chat_id))
+        client.iter_dialogs.assert_not_called()
+
+
 class TestHelp:
+    @pytest.mark.parametrize("command", ["read", "chats"])
+    def test_help_describes_substring_and_numeric_ids(self, command):
+        result = runner.invoke(app, [command, "--help"])
+
+        assert result.exit_code == 0
+        plain = re.sub(r"\x1b\[[0-9;]*m", "", result.output).lower()
+        assert "substring" in plain
+        assert "id" in plain
+        assert "name matching" in plain
+
     def test_main_help(self):
         result = runner.invoke(app, ["--help"])
 

@@ -242,17 +242,43 @@ def _parse_date(value: str) -> datetime:
     return datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=UTC)
 
 
+def _report_chat_resolution_error(error) -> None:
+    typer.echo(str(error), err=True)
+    typer.echo(
+        json.dumps(
+            {
+                "error": "chat_not_found",
+                "query": error.query,
+                "candidates": error.candidates,
+            },
+            ensure_ascii=False,
+        ),
+        err=True,
+    )
+
+
 @app.command()
 def chats(
     filter_: Annotated[
-        str | None, typer.Option("--filter", help="Fuzzy filter by chat name.")
+        str | None,
+        typer.Option(
+            "--filter", help="Case-insensitive substring filter by chat name."
+        ),
     ] = None,
-    limit: Annotated[int, typer.Option(help="Max chats to list.")] = 100,
+    limit: Annotated[
+        int, typer.Option(help="Max dialogs to scan before filtering.")
+    ] = 100,
     pretty: Annotated[
         bool, typer.Option("--pretty", help="Rich table output.")
     ] = False,
 ) -> None:
-    """List your Telegram chats."""
+    """List your Telegram chats.
+
+    JSONL includes id (Telethon dialog entity ID), name, chat_type,
+    unread_count, pinned, and date. Pass id to read, context, or media to
+    skip name matching entirely. Negative group/channel IDs are also accepted;
+    put options before -- and the negative ID after it: tg read -- -1001234567890.
+    """
     from tgcli.client import create_client, list_chats
 
     async def _run():
@@ -292,6 +318,13 @@ def chats(
     help=(
         "Read recent messages from a chat. Newest first by default (--head for "
         "oldest).\n\n"
+        "Chat names match case-insensitively: exact first, then a unique "
+        "substring. Substring matches print the resolved name on stderr. "
+        "Ambiguous or missing names exit 1 with a human-readable "
+        "error and one JSON line on stderr (error, query, candidates).\n\n"
+        "Pass an id from `tg chats` to skip name matching entirely. "
+        "Negative group/channel IDs are accepted: "
+        "`tg read --limit 20 -- -1001234567890`.\n\n"
         "Default JSONL includes id, text, chat_name, sender_name, "
         "sender_username, sender_id, date, reply_to_msg_id, media_type, and "
         "media_filename. sender_username may be null; sender_id is the most "
@@ -306,7 +339,9 @@ def chats(
     )
 )
 def read(
-    chat: Annotated[str, typer.Argument(help="Chat or person to read messages from.")],
+    chat: Annotated[
+        str, typer.Argument(help="Chat name, id, @username, phone, or me.")
+    ],
     query: Annotated[
         str | None, typer.Option("--query", "-q", help="Filter messages by text.")
     ] = None,
@@ -335,7 +370,7 @@ def read(
     ] = False,
 ) -> None:
     """Read recent messages from a chat."""
-    from tgcli.client import create_client, read_messages
+    from tgcli.client import ChatResolutionError, create_client, read_messages
 
     try:
         after_dt = _parse_date(after) if after else None
@@ -368,6 +403,9 @@ def read(
     except UnauthorizedError:
         stderr.print("[red]Not authenticated.[/red] Run `tg auth login` first.")
         raise typer.Exit(2)
+    except ChatResolutionError as e:
+        _report_chat_resolution_error(e)
+        raise typer.Exit(1)
     except Exception as e:
         stderr.print(f"[red]Read failed:[/red] {e}")
         raise typer.Exit(1)
@@ -390,6 +428,9 @@ def read(
 @app.command(
     help=(
         "View a message with surrounding context.\n\n"
+        "Chat names use exact matching first, then a unique case-insensitive "
+        "substring. Pass an id from `tg chats` to skip name matching. "
+        "For negative IDs, put options before -- and the ID after it.\n\n"
         "Default JSONL uses the same message fields as `read` (including "
         "media_type and media_filename) and adds boolean flags such as target "
         "and replied_to on relevant lines."
@@ -406,7 +447,7 @@ def context(
     ] = False,
 ) -> None:
     """View a message with surrounding context."""
-    from tgcli.client import create_client, get_context
+    from tgcli.client import ChatResolutionError, create_client, get_context
 
     async def _run():
         client = create_client()
@@ -422,6 +463,9 @@ def context(
     except UnauthorizedError:
         stderr.print("[red]Not authenticated.[/red] Run `tg auth login` first.")
         raise typer.Exit(2)
+    except ChatResolutionError as e:
+        _report_chat_resolution_error(e)
+        raise typer.Exit(1)
     except Exception as e:
         stderr.print(f"[red]Context fetch failed:[/red] {e}")
         raise typer.Exit(1)
@@ -451,6 +495,9 @@ def context(
 @app.command(
     help=(
         "Download the attachment of one message.\n\n"
+        "Chat names use exact matching first, then a unique case-insensitive "
+        "substring. Pass an id from `tg chats` to skip name matching. "
+        "For negative IDs, put options before -- and the ID after it.\n\n"
         "Prints a single JSON line with id, path, and media_type. Fails when "
         "the message has no downloadable media (webpage previews count as "
         "no media) or the id is not found. Executables, scripts, installers, "
@@ -477,7 +524,7 @@ def media(
     ] = 100,
 ) -> None:
     """Download the attachment of one message."""
-    from tgcli.client import create_client, download_media
+    from tgcli.client import ChatResolutionError, create_client, download_media
 
     os.makedirs(out, exist_ok=True)
 
@@ -502,6 +549,9 @@ def media(
     except UnauthorizedError:
         stderr.print("[red]Not authenticated.[/red] Run `tg auth login` first.")
         raise typer.Exit(2)
+    except ChatResolutionError as e:
+        _report_chat_resolution_error(e)
+        raise typer.Exit(1)
     except Exception as e:
         stderr.print(f"[red]Download failed:[/red] {e}")
         raise typer.Exit(1)

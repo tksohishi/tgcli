@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
+import sys
 import zipfile
 from datetime import datetime
+from difflib import get_close_matches
 
 from telethon import TelegramClient
+from telethon.errors import UsernameInvalidError
 from telethon.sessions import StringSession
 from telethon.tl.types import (
+    ChatEmpty,
     DocumentAttributeAudio,
     DocumentAttributeFilename,
     DocumentAttributeSticker,
@@ -32,6 +37,25 @@ from tgcli.media import (
 from tgcli.session import load_session
 
 _USERNAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{4,31}$")
+
+
+class ChatResolutionError(ValueError):
+    def __init__(self, query: str, candidates: list[str]) -> None:
+        self.query = query
+        self.candidates = candidates
+        message = f"Cannot find chat {json.dumps(query, ensure_ascii=False)}. "
+        if candidates:
+            message += (
+                "Did you mean:\n"
+                + "\n".join(
+                    json.dumps(candidate, ensure_ascii=False)
+                    for candidate in candidates
+                )
+                + "?"
+            )
+        else:
+            message += "Use `tg chats --filter` to find exact names."
+        super().__init__(message)
 
 
 def create_client(config: TelegramConfig | None = None) -> TelegramClient:
@@ -80,25 +104,52 @@ async def _resolve_entity(client: TelegramClient, name: str):
     """Resolve a name to a Telethon entity.
 
     Handles @usernames, phone numbers, and numeric IDs via get_entity().
-    Plain names are matched case-insensitively against dialog names.
+    Plain names prefer exact matches, then unique case-insensitive substrings.
     """
     if name.lower() == "me":
         return await client.get_me()
 
-    if name.startswith("@") or name.startswith("+") or name.lstrip("-").isdigit():
+    if re.fullmatch(r"-?[0-9]+", name):
+        chat_id = int(name)
+        try:
+            entity = await client.get_entity(chat_id)
+            if not isinstance(entity, ChatEmpty):
+                return entity
+        except ValueError:
+            pass
+        # StringSession does not persist the entity cache across invocations.
+        async for dialog in client.iter_dialogs():
+            if (dialog.entity.id if chat_id >= 0 else dialog.id) == chat_id:
+                return dialog.entity
+        raise ChatResolutionError(name, [])
+
+    if name.startswith("@") or name.startswith("+"):
         try:
             return await client.get_entity(name)
-        except Exception:  # noqa: S110
+        except (ValueError, UsernameInvalidError):
             pass
 
     name_lower = name.lower()
+    dialogs = []
     async for dialog in client.iter_dialogs():
         if dialog.name.lower() == name_lower:
             return dialog.entity
+        dialogs.append(dialog)
 
-    raise ValueError(
-        f'Cannot find chat "{name}". Use `tg chats --filter` to find exact names.'
-    )
+    matches = [dialog for dialog in dialogs if name_lower in dialog.name.lower()]
+    if len(matches) == 1:
+        print(
+            f"Resolved {json.dumps(name, ensure_ascii=False)} -> "
+            f"{json.dumps(matches[0].name, ensure_ascii=False)}",
+            file=sys.stderr,
+        )
+        return matches[0].entity
+    if matches:
+        raise ChatResolutionError(name, [dialog.name for dialog in matches])
+
+    close_names = get_close_matches(name_lower, [d.name.lower() for d in dialogs])
+    candidates = [d.name for d in dialogs if d.name.lower() in close_names]
+    raise ChatResolutionError(name, candidates)
 
 
 async def _resolve_sender(client: TelegramClient, chat_entity, value: str):
@@ -207,6 +258,7 @@ async def list_chats(
         if not filter_lower or filter_lower in dialog.name.lower():
             results.append(
                 ChatData(
+                    id=dialog.entity.id,
                     name=dialog.name,
                     chat_type=_chat_type(dialog.entity),
                     unread_count=dialog.unread_count,

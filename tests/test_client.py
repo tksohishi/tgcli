@@ -6,7 +6,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from tgcli.client import create_client, get_context, read_messages
+from tgcli.client import (
+    ChatResolutionError,
+    _resolve_entity,
+    create_client,
+    get_context,
+    list_chats,
+    read_messages,
+)
 
 _next_entity_id = 0
 
@@ -71,6 +78,175 @@ class TestCreateClient:
         mock_load.assert_called_once_with(store="file")
         mock_ss.assert_called_once_with("session_str")
         mock_tc.assert_called_once_with(mock_ss.return_value, 123, "abc")
+
+
+class TestResolveEntity:
+    @pytest.fixture()
+    def client(self):
+        client = AsyncMock()
+        client.get_entity.side_effect = ValueError("not found")
+        client.iter_dialogs = _mock_iter_dialogs()
+        return client
+
+    async def test_exact_match_precedes_substrings(self, client, capsys):
+        dialogs = [_mock_dialog("Mira Vale | Example"), _mock_dialog("Mira Vale")]
+        client.iter_dialogs = MagicMock(return_value=_async_iter(dialogs))
+
+        assert await _resolve_entity(client, "mIRA vALE") is dialogs[1].entity
+        client.iter_dialogs.assert_called_once_with()
+        client.get_entity.assert_not_awaited()
+        assert capsys.readouterr() == ("", "")
+
+    async def test_unique_substring_is_case_insensitive(self, client, capsys):
+        dialogs = [_mock_dialog("Other"), _mock_dialog("Mira Vale | Example")]
+        client.iter_dialogs = MagicMock(return_value=_async_iter(dialogs))
+
+        assert await _resolve_entity(client, "mIRA vALE") is dialogs[1].entity
+        client.iter_dialogs.assert_called_once_with()
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert captured.err == 'Resolved "mIRA vALE" -> "Mira Vale | Example"\n'
+
+    async def test_resolution_notice_escapes_names_on_one_line(self, client, capsys):
+        query = 'Mira "[red]" \\ 雪\n'
+        client.iter_dialogs = _mock_iter_dialogs(query + "Example")
+
+        await _resolve_entity(client, query)
+
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert captured.err == (
+            'Resolved "Mira \\"[red]\\" \\\\ 雪\\n" -> '
+            '"Mira \\"[red]\\" \\\\ 雪\\nExample"\n'
+        )
+
+    async def test_ambiguous_substring_lists_candidates(self, client):
+        candidates = ["Mira Vale | Example", "Mira Vale | Studio"]
+        client.iter_dialogs = _mock_iter_dialogs(*candidates)
+
+        with pytest.raises(ChatResolutionError) as caught:
+            await _resolve_entity(client, "Mira Vale")
+
+        assert caught.value.query == "Mira Vale"
+        assert caught.value.candidates == candidates
+        assert 'Cannot find chat "Mira Vale". Did you mean:' in str(caught.value)
+        assert '\n"Mira Vale | Example"' in str(caught.value)
+        assert '\n"Mira Vale | Studio"' in str(caught.value)
+        client.iter_dialogs.assert_called_once_with()
+
+    async def test_no_match_keeps_discovery_hint(self, client):
+        client.iter_dialogs = _mock_iter_dialogs("Project Alpha")
+
+        with pytest.raises(ChatResolutionError) as caught:
+            await _resolve_entity(client, "zzzzzz")
+
+        assert caught.value.query == "zzzzzz"
+        assert caught.value.candidates == []
+        assert 'Cannot find chat "zzzzzz".' in str(caught.value)
+        assert "Use `tg chats --filter`" in str(caught.value)
+        client.iter_dialogs.assert_called_once_with()
+
+    async def test_near_match_suggested_but_never_resolved(self, client):
+        client.iter_dialogs = _mock_iter_dialogs("Mira Vale", "Project Alpha")
+
+        with pytest.raises(ChatResolutionError) as caught:
+            await _resolve_entity(client, "mira vlae")
+
+        assert caught.value.candidates == ["Mira Vale"]
+        assert "Did you mean:" in str(caught.value)
+        client.iter_dialogs.assert_called_once_with()
+
+    @pytest.mark.parametrize("query", ["@mira_example", "+12025550123"])
+    async def test_direct_reference_precedes_names(self, client, query):
+        client.get_entity.side_effect = None
+        entity = client.get_entity.return_value
+
+        assert await _resolve_entity(client, query) is entity
+        client.get_entity.assert_awaited_once_with(query)
+        client.iter_dialogs.assert_not_called()
+
+    async def test_me_uses_current_user(self, client):
+        assert await _resolve_entity(client, "ME") is client.get_me.return_value
+        client.get_me.assert_awaited_once_with()
+        client.iter_dialogs.assert_not_called()
+
+    async def test_invalid_username_becomes_resolution_error(self, client):
+        from telethon.errors import UsernameInvalidError
+
+        client.get_entity.side_effect = UsernameInvalidError(None)
+
+        with pytest.raises(ChatResolutionError) as caught:
+            await _resolve_entity(client, "@invalid_username")
+
+        assert caught.value.query == "@invalid_username"
+        assert caught.value.candidates == []
+
+    @pytest.mark.parametrize("query", ["123", "-123", "-1000000000123"])
+    async def test_numeric_reference_is_passed_as_integer(self, client, query):
+        client.get_entity.side_effect = None
+
+        assert await _resolve_entity(client, query) is client.get_entity.return_value
+        client.get_entity.assert_awaited_once_with(int(query))
+        client.iter_dialogs.assert_not_called()
+
+    @pytest.mark.parametrize("query", ["123", "-123", "-1000000000123"])
+    async def test_uncached_id_resolves_from_dialog(self, client, query):
+        dialog = _mock_dialog("Mira Vale")
+        dialog.entity.id = 123
+        dialog.id = int(query) if query.startswith("-") else -123
+        client.iter_dialogs = MagicMock(return_value=_async_iter([dialog]))
+
+        assert await _resolve_entity(client, query) is dialog.entity
+        client.get_entity.assert_awaited_once_with(int(query))
+        client.iter_dialogs.assert_called_once_with()
+
+    async def test_missing_numeric_id_never_matches_name(self, client):
+        dialog = _mock_dialog("999999999")
+        dialog.entity.id = 123
+        dialog.id = -123
+        client.iter_dialogs = MagicMock(return_value=_async_iter([dialog]))
+
+        with pytest.raises(ChatResolutionError) as caught:
+            await _resolve_entity(client, "999999999")
+
+        assert caught.value.candidates == []
+
+    async def test_empty_chat_is_a_resolution_failure(self, client):
+        from telethon.tl.types import ChatEmpty
+
+        client.get_entity.side_effect = None
+        client.get_entity.return_value = ChatEmpty(id=123)
+
+        with pytest.raises(ChatResolutionError) as caught:
+            await _resolve_entity(client, "-123")
+
+        assert caught.value.query == "-123"
+        assert caught.value.candidates == []
+
+    async def test_authorization_errors_are_not_resolution_errors(self, client):
+        from telethon.errors import UnauthorizedError
+
+        client.get_entity.side_effect = UnauthorizedError(None, None)
+        with pytest.raises(UnauthorizedError):
+            await _resolve_entity(client, "123")
+        client.iter_dialogs.assert_not_called()
+
+
+class TestListChats:
+    async def test_json_id_uses_entity_id_and_filter_matches_substring(self):
+        dialog = _mock_dialog("Mira Vale | Example")
+        dialog.entity.id = 123
+        dialog.id = -1000000000123
+        dialog.unread_count = 2
+        dialog.date = None
+        client = AsyncMock()
+        client.iter_dialogs = MagicMock(return_value=_async_iter([dialog]))
+
+        chats = await list_chats(client, filter_name="mIRA vALE")
+
+        assert len(chats) == 1
+        assert chats[0].id == 123
+        assert chats[0].name == dialog.name
 
 
 class TestReadMessages:
