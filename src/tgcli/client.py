@@ -6,6 +6,7 @@ import re
 import shutil
 import sys
 import zipfile
+from collections.abc import Callable
 from datetime import datetime
 from difflib import get_close_matches
 
@@ -279,12 +280,18 @@ async def read_messages(
     after: datetime | None = None,
     before: datetime | None = None,
     reverse: bool = False,
+    scan: int | None = None,
+    on_scan_cap: Callable[[int, datetime | None], None] | None = None,
 ) -> list[MessageData]:
     """Read messages from a chat.
 
     Default order is newest first (tail). Set reverse=True for oldest first (head).
     Optional query does client-side text filtering. Optional from_ filters by sender
     (resolved server-side via from_user).
+
+    When query or from_ is set, at most `scan` messages are iterated unless `after`
+    bounds the walk. If the cap is hit, on_scan_cap(scanned, last_scanned_date) is
+    called and the matches found so far are returned.
     """
     entity = await _resolve_entity(client, chat)
     chat_name = _get_name(entity)
@@ -297,6 +304,10 @@ async def read_messages(
     filter_query = query.lower() if query else None
     offset_date = before if before and not reverse else None
 
+    scan_cap = scan if filtering and after is None else None
+    scanned = 0
+    last_date: datetime | None = None
+
     results: list[MessageData] = []
     async for msg in client.iter_messages(
         entity,
@@ -305,6 +316,13 @@ async def read_messages(
         reverse=reverse,
         from_user=from_user,
     ):
+        if scan_cap is not None and scanned >= scan_cap:
+            if on_scan_cap:
+                on_scan_cap(scanned, last_date)
+            break
+        scanned += 1
+        last_date = msg.date
+
         if before and msg.date and msg.date >= before:
             if reverse:
                 break

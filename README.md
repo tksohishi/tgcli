@@ -154,13 +154,16 @@ When no substring matches, similar spellings are offered as suggestions without 
 
 | Flag           | Description                            |
 |----------------|----------------------------------------|
-| `--query`/`-q` | Filter messages by text                |
+| `--query`/`-q` | Filter messages by text (client-side)  |
 | `--from`       | Filter by sender                       |
 | `--limit`      | Max messages (default 50)              |
+| `--scan`       | Max messages walked when filtering (default 2000) |
 | `--head`       | Oldest messages first                  |
 | `--after`      | Only messages after date (YYYY-MM-DD)  |
 | `--before`     | Only messages before date (YYYY-MM-DD) |
 | `--pretty`     | Rich table output instead of JSONL     |
+
+`--query` and `--from` filter client-side while walking back through the chat. The walk stops after `--scan` messages unless `--after` bounds it by date; when the cap is hit, matches found so far are printed and a `scan cap reached: ...` line goes to stderr (exit code 0). Narrow with `--after` or raise `--scan`.
 
 JSONL fields: `id`, `text`, `chat_name`, `sender_name`, `sender_username`, `sender_id`, `date`, `reply_to_msg_id`, `media_type`, `media_filename`. `media_type` is `null` or one of `photo`, `document`, `video`, `voice`, `sticker`, `webpage`, `other`; `media_filename` is the document's original filename when present. `--pretty` marks attachments with a `[photo]`-style tag.
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -343,6 +343,76 @@ class TestReadMessages:
         # limit=None when filtering
         call_kwargs = client.iter_messages.call_args[1]
         assert call_kwargs["limit"] is None
+
+    async def test_read_query_scan_cap_stops_walk(self, client):
+        dates = [
+            datetime(2025, 1, 1, tzinfo=UTC) + timedelta(days=i) for i in range(10)
+        ]
+        msgs = [
+            _mock_msg(i, "hello" if i == 1 else "other", date=dates[9 - i])
+            for i in range(10)
+        ]
+        client.iter_messages = MagicMock(return_value=_async_iter(msgs))
+        cap_calls = []
+
+        results = await read_messages(
+            client,
+            "Group",
+            query="hello",
+            scan=3,
+            on_scan_cap=lambda *a: cap_calls.append(a),
+        )
+
+        assert [m.id for m in results] == [1]
+        assert cap_calls == [(3, dates[7])]
+
+    async def test_read_query_scan_cap_not_hit_at_exact_count(self, client):
+        msgs = [_mock_msg(i, "other") for i in range(3)]
+        client.iter_messages = MagicMock(return_value=_async_iter(msgs))
+        cap_calls = []
+
+        results = await read_messages(
+            client,
+            "Group",
+            query="hello",
+            scan=3,
+            on_scan_cap=lambda *a: cap_calls.append(a),
+        )
+
+        assert results == []
+        assert cap_calls == []
+
+    async def test_read_query_scan_cap_ignored_with_after(self, client):
+        msgs = [
+            _mock_msg(i, "other", date=datetime(2025, 6, 1, tzinfo=UTC))
+            for i in range(5)
+        ]
+        client.iter_messages = MagicMock(return_value=_async_iter(msgs))
+        cap_calls = []
+
+        results = await read_messages(
+            client,
+            "Group",
+            query="hello",
+            scan=2,
+            after=datetime(2025, 1, 1, tzinfo=UTC),
+            on_scan_cap=lambda *a: cap_calls.append(a),
+        )
+
+        assert results == []
+        assert cap_calls == []
+
+    async def test_read_scan_cap_ignored_without_filter(self, client):
+        msgs = [_mock_msg(i, f"msg{i}") for i in range(5)]
+        client.iter_messages = MagicMock(return_value=_async_iter(msgs))
+        cap_calls = []
+
+        results = await read_messages(
+            client, "Group", scan=2, on_scan_cap=lambda *a: cap_calls.append(a)
+        )
+
+        assert len(results) == 5
+        assert cap_calls == []
 
     async def test_read_query_case_insensitive(self, client):
         msgs = [_mock_msg(1, "Hello World"), _mock_msg(2, "goodbye")]

@@ -308,6 +308,45 @@ class TestRead:
 
     @patch("tgcli.client.create_client")
     @patch("tgcli.client.read_messages", new_callable=AsyncMock)
+    def test_read_query_no_match_stops_at_scan_cap(self, mock_read, mock_create):
+        client = AsyncMock()
+        mock_create.return_value = client
+
+        async def _capped(*args, scan, on_scan_cap, **kwargs):
+            on_scan_cap(scan, datetime(2025, 6, 1, 12, 0, tzinfo=UTC))
+            return []
+
+        mock_read.side_effect = _capped
+
+        result = runner.invoke(
+            app, ["read", "Group", "--query", "fooms", "--scan", "10"]
+        )
+
+        assert result.exit_code == 0
+        assert "No messages found" in result.output
+        back_to = (
+            datetime(2025, 6, 1, 12, 0, tzinfo=UTC).astimezone().strftime("%Y-%m-%d")
+        )
+        assert (
+            f"scan cap reached: 10 messages read back to {back_to}; "
+            "narrow with --after or raise --scan"
+        ) in result.output
+        assert mock_read.call_args.kwargs["scan"] == 10
+
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.read_messages", new_callable=AsyncMock)
+    def test_read_scan_defaults_to_2000(self, mock_read, mock_create):
+        mock_create.return_value = AsyncMock()
+        mock_read.return_value = []
+
+        result = runner.invoke(app, ["read", "Group", "-q", "x"])
+
+        assert result.exit_code == 0
+        assert mock_read.call_args.kwargs["scan"] == 2000
+        assert "scan cap reached" not in result.output
+
+    @patch("tgcli.client.create_client")
+    @patch("tgcli.client.read_messages", new_callable=AsyncMock)
     def test_read_unauthorized_exits_2(self, mock_read, mock_create):
         client = AsyncMock()
         mock_create.return_value = client

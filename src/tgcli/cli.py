@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import subprocess
+import sys
 from datetime import UTC, datetime
 from importlib.metadata import version
 from typing import Annotated
@@ -334,6 +335,11 @@ def chats(
         "--from accepts me, @username, bare username, numeric user ID, phone, "
         "or exact display name. Display names can be ambiguous; prefer username "
         "or numeric ID for automation.\n\n"
+        "--query and --from filter client-side while walking back through the "
+        "chat, so a term with few or no matches would otherwise scan the whole "
+        "history. The walk stops after --scan messages (default 2000) unless "
+        "--after bounds it by date. When the cap is hit, matches found so far are "
+        "printed and a `scan cap reached` line goes to stderr; exit code stays 0.\n\n"
         "Examples: `tg read Team --from takeshi55555`, "
         '`tg read Team --from @takeshi55555`, `tg read Team --from "Takeshi"`.'
     )
@@ -343,7 +349,15 @@ def read(
         str, typer.Argument(help="Chat name, id, @username, phone, or me.")
     ],
     query: Annotated[
-        str | None, typer.Option("--query", "-q", help="Filter messages by text.")
+        str | None,
+        typer.Option(
+            "--query",
+            "-q",
+            help=(
+                "Filter messages by text (client-side substring match, "
+                "case-insensitive). Bounded by --scan or --after."
+            ),
+        ),
     ] = None,
     from_: Annotated[
         str | None,
@@ -356,6 +370,17 @@ def read(
         ),
     ] = None,
     limit: Annotated[int, typer.Option(help="Max messages to return.")] = 50,
+    scan: Annotated[
+        int,
+        typer.Option(
+            "--scan",
+            min=1,
+            help=(
+                "Max messages to walk when --query or --from is set and --after "
+                "is not. Matches found before the cap are still printed."
+            ),
+        ),
+    ] = 2000,
     head: Annotated[
         bool, typer.Option("--head", help="Oldest messages first.")
     ] = False,
@@ -380,6 +405,12 @@ def read(
         stderr.print("Expected format: YYYY-MM-DD")
         raise typer.Exit(1)
 
+    scan_cap: tuple[int, datetime | None] | None = None
+
+    def _on_scan_cap(scanned: int, last_date: datetime | None) -> None:
+        nonlocal scan_cap
+        scan_cap = (scanned, last_date)
+
     async def _run():
         client = create_client()
         async with client:
@@ -392,6 +423,8 @@ def read(
                 after=after_dt,
                 before=before_dt,
                 reverse=head,
+                scan=scan,
+                on_scan_cap=_on_scan_cap,
             )
 
     try:
@@ -412,9 +445,7 @@ def read(
 
     if not results:
         stdout.print("No messages found.")
-        return
-
-    if pretty:
+    elif pretty:
         from tgcli.formatting import format_search_results
 
         stdout.print(format_search_results(results))
@@ -423,6 +454,15 @@ def read(
 
         for msg in results:
             print(format_message_jsonl(msg))
+
+    if scan_cap:
+        scanned, last_date = scan_cap
+        back_to = last_date.astimezone().strftime("%Y-%m-%d") if last_date else "?"
+        print(
+            f"scan cap reached: {scanned} messages read back to {back_to}; "
+            "narrow with --after or raise --scan",
+            file=sys.stderr,
+        )
 
 
 @app.command(
