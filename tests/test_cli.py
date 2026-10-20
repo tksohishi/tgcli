@@ -201,11 +201,36 @@ class TestAuthSmart:
         assert "authenticated" in result.output
         assert "tg auth logout" in result.output
 
+    @patch("tgcli.auth.login_qr", new_callable=AsyncMock)
     @patch("tgcli.auth.login", new_callable=AsyncMock)
     @patch("tgcli.auth.get_status", new_callable=AsyncMock)
     @patch("tgcli.config.load_config")
-    def test_auth_not_logged_in_triggers_login(
-        self, mock_load, mock_status, mock_login
+    def test_auth_not_logged_in_defaults_to_qr(
+        self, mock_load, mock_status, mock_login, mock_qr
+    ):
+        """Bare Enter picks QR: login codes may never arrive at all."""
+        mock_load.return_value = MagicMock()
+        mock_status.return_value = {
+            "authenticated": False,
+            "phone": None,
+            "session_exists": False,
+            "session_store": "file",
+        }
+        result = runner.invoke(app, ["auth"], input="\n")
+
+        assert result.exit_code == 0
+        assert "Login successful" in result.output
+        assert "[1] QR code" in result.output
+        mock_qr.assert_awaited_once()
+        mock_login.assert_not_awaited()
+
+    @pytest.mark.parametrize("answer", ["2", "phone", "code", "PHONE"])
+    @patch("tgcli.auth.login_qr", new_callable=AsyncMock)
+    @patch("tgcli.auth.login", new_callable=AsyncMock)
+    @patch("tgcli.auth.get_status", new_callable=AsyncMock)
+    @patch("tgcli.config.load_config")
+    def test_auth_can_still_choose_phone(
+        self, mock_load, mock_status, mock_login, mock_qr, answer
     ):
         mock_load.return_value = MagicMock()
         mock_status.return_value = {
@@ -214,11 +239,11 @@ class TestAuthSmart:
             "session_exists": False,
             "session_store": "file",
         }
-        result = runner.invoke(app, ["auth"])
+        result = runner.invoke(app, ["auth"], input=f"{answer}\n")
 
         assert result.exit_code == 0
-        assert "Login successful" in result.output
         mock_login.assert_awaited_once()
+        mock_qr.assert_not_awaited()
 
     @patch("webbrowser.open")
     @patch("tgcli.auth.login", new_callable=AsyncMock)
@@ -238,8 +263,8 @@ class TestAuthSmart:
             "session_exists": False,
             "session_store": "file",
         }
-        # Input: Enter to open browser, api_id, api_hash
-        result = runner.invoke(app, ["auth"], input="\n123456\nabc123\n")
+        # Input: Enter to open browser, api_id, api_hash, then method 2 (phone)
+        result = runner.invoke(app, ["auth"], input="\n123456\nabc123\n2\n")
 
         assert result.exit_code == 0
         mock_write.assert_called_once_with(123456, "abc123")

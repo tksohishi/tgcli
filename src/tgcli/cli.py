@@ -149,8 +149,19 @@ def auth_default(ctx: typer.Context) -> None:
         stdout.print("Run `tg auth logout` to log out.")
         return
 
-    # Step 3: not authenticated, run login
-    _run_login()
+    # Step 3: not authenticated. QR goes first and takes a bare Enter:
+    # Telegram silently suppresses login-code delivery for some IPs and
+    # subnets, so the code may simply never arrive.
+    stderr.print("No session found. Choose a login method:")
+    stderr.print(
+        r"  \[1] QR code       - scan from a device already logged in (reliable)"
+    )
+    stderr.print(r"  \[2] Phone + code  - Telegram may silently suppress code delivery")
+    choice = typer.prompt("Method", default="1").strip().lower()
+    if choice in {"2", "phone", "code"}:
+        _run_login()
+    else:
+        _run_qr_login()
 
 
 def _run_login() -> None:

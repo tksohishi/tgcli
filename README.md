@@ -51,9 +51,14 @@ Create a Telegram API app at [my.telegram.org/apps](https://my.telegram.org/apps
 tg auth
 ```
 
-This walks you through setup: saves your API credentials to `~/.config/tgcli/config.toml`, then logs in with phone number + verification code. The Telegram session is stored at `~/.config/tgcli/session` by default.
+This walks you through setup: saves your API credentials to `~/.config/tgcli/config.toml`, then offers a login method. The Telegram session is stored at `~/.config/tgcli/session` by default.
 
-If codes do not arrive, use QR login instead:
+Two methods are available, and the prompt defaults to the first:
+
+1. **QR code** — a device where you are already logged in scans the code and approves this session. Nothing has to be delivered to your phone number.
+2. **Phone + code** — the classic flow. Telegram silently suppresses verification-code delivery to IPs and subnets it distrusts, so the code may never arrive at all; this is particularly common on VPS and other datacenter addresses.
+
+If codes do not arrive, go straight to QR:
 
 ```bash
 tg auth qr
