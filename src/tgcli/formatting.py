@@ -167,3 +167,41 @@ def format_auth_status(
         output.append(f"none ({session_store})\n", style="red")
 
     return output
+
+
+# Two module rows per text line, so a login QR fits an 80x24 terminal.
+_HALF_BLOCKS = {
+    (True, True): "█",
+    (True, False): "▀",
+    (False, True): "▄",
+    (False, False): " ",
+}
+_QR_BORDER = 2
+
+
+def format_qr(url: str) -> Text:
+    """Render url as a scannable QR code in terminal text.
+
+    The style is pinned to black-on-white instead of inherited: a scanner
+    needs dark modules on a light field, and on the many dark terminal
+    themes the default foreground would render the code inverted.
+    """
+    import qrcode
+
+    qr = qrcode.QRCode(
+        border=_QR_BORDER,
+        error_correction=qrcode.constants.ERROR_CORRECT_L,
+    )
+    qr.add_data(url)
+    qr.make(fit=True)
+
+    matrix = qr.get_matrix()
+    blank = [False] * len(matrix[0])
+    lines = []
+    for y in range(0, len(matrix), 2):
+        top = matrix[y]
+        bottom = matrix[y + 1] if y + 1 < len(matrix) else blank
+        lines.append(
+            "".join(_HALF_BLOCKS[(bool(t), bool(b))] for t, b in zip(top, bottom))
+        )
+    return Text("\n".join(lines), style="black on white")

@@ -8,6 +8,7 @@ Give AI agents (Claude Code, Codex, Cursor, etc.) direct access to your Telegram
 - **Minimal surface** — a handful of commands; easy for agents to discover and invoke
 - **Chat name resolution**: exact display names take priority; a unique substring also matches
 - **`--pretty` for humans** — Rich tables when you want to read output yourself
+- **QR login** — authorize by scanning a code from a device that is already logged in, for when Telegram never delivers a verification code
 - **Agent-friendly session storage** — Telethon session key stored in a local `0600` file by default; keychain remains available as a legacy option
 
 ## Installation
@@ -51,6 +52,12 @@ tg auth
 ```
 
 This walks you through setup: saves your API credentials to `~/.config/tgcli/config.toml`, then logs in with phone number + verification code. The Telegram session is stored at `~/.config/tgcli/session` by default.
+
+If codes do not arrive, use QR login instead:
+
+```bash
+tg auth qr
+```
 
 ### 3. Read Messages
 
@@ -108,10 +115,25 @@ Smart entrypoint: creates config if missing, logs in if needed, shows status if 
 
 Explicit subcommands:
 
+- `tg auth qr` - log in by QR code scanned from an already authorized device
 - `tg auth login` - interactive login (phone + code/2FA)
 - `tg auth logout` - remove the local session
 - `tg auth migrate-session` - copy a legacy keychain session to the local session file
 - `tg auth status` - show auth state
+
+#### `tg auth qr`
+
+Prints a QR code in the terminal. On a device that is already logged in, open Telegram -> Settings -> Devices -> Link Desktop Device and scan it; that device approves this session, so no verification code has to reach you. This is the reliable path when `tg auth login` produces no code.
+
+The code is printed black-on-white regardless of terminal theme, because scanners need dark modules on a light field. It occupies at most 21 rows, so it fits an 80x24 terminal.
+
+Telegram's login tokens are short-lived. When one expires the code rotates itself and the new one is printed, until it is scanned or `--timeout` runs out. Accounts with two-factor authentication are prompted for their cloud password after the scan is approved.
+
+The `tg://login?token=...` URL is printed under the code. If Telegram Desktop runs on this machine you can open that URL instead of scanning — no camera needed. It is a short-lived login credential, so it goes to stderr along with the rest of the QR output, keeping it out of pipes and leaving stdout clean.
+
+| Flag        | Description                                        |
+|-------------|----------------------------------------------------|
+| `--timeout` | Seconds to wait for a scan before giving up (default 300) |
 
 ### `tg chats`
 

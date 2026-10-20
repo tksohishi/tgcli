@@ -35,7 +35,14 @@ app = typer.Typer(
     )
 )
 auth_app = typer.Typer(
-    help="Manage Telegram authentication.", invoke_without_command=True
+    help=(
+        "Manage Telegram authentication.\n\n"
+        "Bare `tg auth` sets up config and offers a login method. `tg auth qr` "
+        "logs in by QR code scanned from a device that is already logged in, "
+        "which is the reliable path when phone verification codes never "
+        "arrive."
+    ),
+    invoke_without_command=True,
 )
 app.add_typer(auth_app, name="auth")
 
@@ -173,10 +180,78 @@ def _run_login() -> None:
     stdout.print("[green]Login successful.[/green]")
 
 
+def _run_qr_login(timeout: float | None = None) -> None:
+    """Shared QR flow for both `tg auth` and `tg auth qr`."""
+    import getpass
+
+    from tgcli.auth import QR_LOGIN_TIMEOUT, login_qr
+    from tgcli.formatting import format_qr
+
+    stderr.print(
+        "\nLogging in by QR code. On a device where you are already logged in,\n"
+        "open Telegram -> Settings -> Devices -> Link Desktop Device, then scan\n"
+        "the code below. That device approves this session, so no verification\n"
+        "code has to reach your phone.\n"
+    )
+
+    def _show_token(url: str, attempt: int) -> None:
+        if attempt > 1:
+            stderr.print(f"[dim]Code expired. Fresh code (#{attempt}):[/dim]")
+        stderr.print(format_qr(url))
+        stderr.print(f"[dim]{url}[/dim]")
+        stderr.print("[dim]Waiting for a device to scan it. Ctrl-C aborts.[/dim]")
+
+    def _password() -> str:
+        return getpass.getpass("Cloud password (2FA): ")
+
+    def _password_error(attempts_left: int) -> None:
+        stderr.print(f"[red]Wrong password.[/red] {attempts_left} attempt(s) left.")
+
+    try:
+        asyncio.run(
+            login_qr(
+                on_token=_show_token,
+                password=_password,
+                on_password_error=_password_error,
+                timeout=QR_LOGIN_TIMEOUT if timeout is None else timeout,
+            )
+        )
+    except KeyboardInterrupt:
+        stderr.print("\nAborted.")
+        raise typer.Exit(1)
+    except Exception as e:
+        stderr.print(f"[red]QR login failed:[/red] {e}")
+        raise typer.Exit(1)
+    stdout.print("[green]Login successful.[/green]")
+
+
 @auth_app.command()
 def login() -> None:
     """Interactive login: phone + verification code (or 2FA password)."""
     _run_login()
+
+
+@auth_app.command("qr")
+def qr(
+    timeout: Annotated[
+        float,
+        typer.Option(
+            "--timeout",
+            min=1,
+            help="Seconds to wait for a scan before giving up.",
+        ),
+    ] = 300.0,
+) -> None:
+    """Log in by QR code scanned from an already authorized device.
+
+    Use this when phone verification codes do not arrive: Telegram
+    silently suppresses code delivery to some IPs and subnets, while a
+    QR scan is approved by a device that is already logged in. The code
+    rotates itself whenever its token expires, until it is scanned or
+    --timeout runs out. Needs no camera if Telegram Desktop runs on this
+    machine: open the printed tg://login URL instead.
+    """
+    _run_qr_login(timeout=timeout)
 
 
 @auth_app.command()

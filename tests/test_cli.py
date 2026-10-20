@@ -10,6 +10,7 @@ import pytest
 from telethon.errors import UnauthorizedError
 from typer.testing import CliRunner
 
+from tgcli.auth import QRLoginTimeout
 from tgcli.cli import app
 from tgcli.formatting import ChatData, MessageData
 
@@ -29,6 +30,65 @@ class TestAuthLogin:
         result = runner.invoke(app, ["auth", "login"])
 
         assert result.exit_code == 1
+
+
+class TestAuthQr:
+    @patch("tgcli.auth.login_qr", new_callable=AsyncMock)
+    def test_qr_login_success(self, mock_qr):
+        result = runner.invoke(app, ["auth", "qr"])
+
+        assert result.exit_code == 0
+        assert "Login successful" in result.output
+        assert "Link Desktop Device" in result.output
+
+    @patch("tgcli.auth.login_qr", new_callable=AsyncMock)
+    def test_qr_login_default_timeout(self, mock_qr):
+        result = runner.invoke(app, ["auth", "qr"])
+
+        assert result.exit_code == 0
+        assert mock_qr.await_args.kwargs["timeout"] == 300.0
+
+    @patch("tgcli.auth.login_qr", new_callable=AsyncMock)
+    def test_qr_login_timeout_flag_is_passed_through(self, mock_qr):
+        result = runner.invoke(app, ["auth", "qr", "--timeout", "45"])
+
+        assert result.exit_code == 0
+        assert mock_qr.await_args.kwargs["timeout"] == 45.0
+
+    @patch(
+        "tgcli.auth.login_qr",
+        new_callable=AsyncMock,
+        side_effect=QRLoginTimeout("No device scanned the QR code within 300s."),
+    )
+    def test_qr_login_timeout_exits_1(self, mock_qr):
+        result = runner.invoke(app, ["auth", "qr"])
+
+        assert result.exit_code == 1
+        assert "QR login failed" in result.output
+        assert "No device scanned" in result.output
+
+    @patch("tgcli.auth.login_qr", new_callable=AsyncMock, side_effect=KeyboardInterrupt)
+    def test_qr_login_ctrl_c_exits_1(self, mock_qr):
+        result = runner.invoke(app, ["auth", "qr"])
+
+        assert result.exit_code == 1
+        assert "Aborted" in result.output
+
+    def test_qr_login_renders_the_code_and_the_url(self):
+        """The on_token callback has to put a scannable code on screen."""
+        url = "tg://login?token=AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+
+        async def fake_login_qr(*, on_token, **kwargs):
+            on_token(url, 1)
+            on_token(url, 2)
+
+        with patch("tgcli.auth.login_qr", fake_login_qr):
+            result = runner.invoke(app, ["auth", "qr"])
+
+        assert result.exit_code == 0
+        assert "\u2588" in result.output
+        assert url in result.output
+        assert "Fresh code (#2)" in result.output
 
 
 class TestAuthLogout:
@@ -885,3 +945,13 @@ class TestHelp:
         assert "logout" in result.output.lower()
         assert "migrate-session" in result.output.lower()
         assert "status" in result.output.lower()
+        assert "qr" in result.output.lower()
+
+    def test_auth_qr_help(self):
+        result = runner.invoke(app, ["auth", "qr", "--help"])
+
+        assert result.exit_code == 0
+        plain = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+        assert "--timeout" in plain
+        assert "already authorized device" in plain
+        assert "do not arrive" in plain

@@ -5,10 +5,10 @@
 ```
 src/tgcli/
   cli.py          # Typer app, thin entrypoints
-  auth.py         # Login/logout/status logic
+  auth.py         # Login/logout/status logic (phone + QR flows)
   client.py       # Telethon wrapper (search, read, context)
   config.py       # Config loading (TOML + env vars)
-  formatting.py   # Pure output formatting functions (no I/O)
+  formatting.py   # Pure output formatting functions (no I/O), incl. terminal QR
   media.py        # Attachment safety rules: extension allowlist, magic bytes (stdlib only)
   session.py      # Keychain-backed StringSession via keyring (cross-platform)
   update.py       # Update checking, install method detection (stdlib only)

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import base64
 import json
 from io import StringIO
 
+import pytest
+import qrcode
 from rich.console import Console
 
 from tgcli.formatting import (
@@ -11,6 +14,7 @@ from tgcli.formatting import (
     format_chat_jsonl,
     format_context,
     format_message_jsonl,
+    format_qr,
     format_search_results,
 )
 
@@ -167,3 +171,65 @@ class TestFormatAuthStatus:
 
         assert "not authenticated" in output
         assert "none (file)" in output
+
+
+def _token_url(nbytes: int) -> str:
+    token = base64.urlsafe_b64encode(bytes(range(nbytes))).decode().rstrip("=")
+    return f"tg://login?token={token}"
+
+
+class TestFormatQr:
+    # Each glyph carries two vertically stacked modules.
+    UNMAP = {"\u2588": (True, True), "\u2580": (True, False),
+             "\u2584": (False, True), " ": (False, False)}  # fmt: skip
+
+    def test_round_trips_the_module_matrix(self):
+        """The half-block packing must be lossless, or the code will not scan."""
+        url = _token_url(24)
+        reference = qrcode.QRCode(
+            border=2, error_correction=qrcode.constants.ERROR_CORRECT_L
+        )
+        reference.add_data(url)
+        reference.make(fit=True)
+        expected = [[bool(cell) for cell in row] for row in reference.get_matrix()]
+
+        rows: list[list[bool]] = []
+        for line in format_qr(url).plain.split("\n"):
+            pairs = [self.UNMAP[char] for char in line]
+            rows.append([top for top, _ in pairs])
+            rows.append([bottom for _, bottom in pairs])
+
+        # An odd-height matrix is padded with one all-light row at the bottom.
+        assert rows[len(expected) :] in ([], [[False] * len(expected[0])])
+        assert rows[: len(expected)] == expected
+
+    def test_uses_only_half_block_glyphs(self):
+        assert set(format_qr(_token_url(24)).plain) <= set(self.UNMAP) | {"\n"}
+
+    def test_pins_black_on_white(self):
+        """Scanners need dark modules on a light field, whatever the theme."""
+        assert format_qr(_token_url(24)).style == "black on white"
+
+    def test_rows_are_equal_width(self):
+        lines = format_qr(_token_url(24)).plain.split("\n")
+
+        assert len({len(line) for line in lines}) == 1
+
+    def test_keeps_a_quiet_zone_around_the_code(self):
+        lines = format_qr(_token_url(24)).plain.split("\n")
+
+        assert lines[0].strip() == ""
+        assert lines[-1].strip() == ""
+        assert all(line.startswith("  ") and line.endswith("  ") for line in lines)
+
+    @pytest.mark.parametrize("nbytes", [16, 24, 32, 40])
+    def test_fits_a_standard_terminal(self, nbytes):
+        lines = format_qr(_token_url(nbytes)).plain.split("\n")
+
+        assert len(lines) <= 21
+        assert len(lines[0]) <= 45
+
+    def test_renders_through_a_console(self):
+        output = _render(format_qr(_token_url(24)))
+
+        assert "\u2588" in output

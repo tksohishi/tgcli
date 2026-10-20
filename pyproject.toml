@@ -25,6 +25,7 @@ dependencies = [
     "typer>=0.15",
     "telethon>=1.42",
     "keyring>=25",
+    "qrcode>=8",
     "rich>=13",
 ]
 
